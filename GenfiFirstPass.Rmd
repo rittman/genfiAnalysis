@@ -1,0 +1,121 @@
+---
+title: "Genfi First Pass"
+author: "Tim Rittman"
+date: "20/06/2015"
+output: pdf_document
+---
+
+A first investigation of the GENFI data. The aim is to assess the connection strength of the data.
+
+```{r,results='asis',echo=FALSE}
+library(plyr)
+library(ggplot2)
+library(xtable)
+
+genfiDir = "/home/tim/GENFI/GENFI_camgrid_20150525/"
+setwd(genfiDir)
+
+inFile = "d2_degree_wt_local"
+# import data
+
+dF = read.table(inFile, header = TRUE, na.strings = "NA")
+
+# convert diagnostic label to a factor and rename
+dF$GS = as.factor(dF$GS)
+dF$GS = revalue(dF$GS, c("0" = "gene negative", "1"="gene positive", "2"="affected"))
+
+# Summarise the patient data
+ptSum = ddply(dF, .(gene), summarise,
+              "gene negative" = length(GS[GS=="gene negative"]),
+              "gene positive" = length(GS[GS=="gene positive"]),
+              "affected"      = length(GS[GS=="affected"])
+              )
+
+print(xtable(ptSum,
+             caption="Subjects included in the analysis"),
+      include.rownames=FALSE)
+
+```
+
+As a first pass, I will examine the connection strength in each of these groups. Firstly, we'll look at the mean connection strength for the whole brain. In order to do this, we'll take the mean connection strength of each individual.
+
+```{r,results='asis',echo=FALSE}
+nodeNames = names(dF)[sapply(names(dF), function(x) grepl("X",x))]
+
+# Re
+dF.stacked = stack(dF[,nodeNames])
+dF.stacked = data.frame(dF.stacked, GS=dF$GS, gene=dF$gene, wbic=dF$wbic)
+
+dF.wb = ddply(dF.stacked, .(gene, wbic, GS), summarise,
+              values = mean(values, na.rm = TRUE)
+              )
+```
+
+Firstly we'll look at the results for the genes combined.
+
+```{r,results='asis',echo=FALSE}
+dF.wb.summary = ddply(dF.wb, .(), summarise,
+                      "gene negative" = paste(round(mean(values[GS=="gene negative"], na.rm = TRUE), digits = 1),
+                                              paste("(", round(sd(values[GS=="gene negative"], na.rm = TRUE), digits = 1),   ")", sep="")),
+                      "gene positive" = paste(round(mean(values[GS=="gene positive"], na.rm = TRUE), digits = 1),
+                                              paste("(", round(sd(values[GS=="gene positive"], na.rm = TRUE), digits = 1),   ")", sep="")),
+                      "affected"      = paste(round(mean(values[GS=="affected"], na.rm = TRUE), digits = 1),
+                                              paste("(", round(sd(values[GS=="affected"], na.rm = TRUE), digits = 1),   ")", sep=""))
+                      )
+
+print(xtable(dF.wb.summary[,-1],
+             caption="Mean and standard deviations for connection strength values in individuals"),
+      include.rownames=FALSE)
+
+# # plot this
+# err <- function(x) qnorm(0.975) * sd(x, na.rm = TRUE)/sqrt(length(x)) # function for standard error
+# 
+# dF.stacked.plot = ddply(dF.stacked, .(gene, GS), summarise, valuesMean=mean(values, na.rm = TRUE),
+#                         upper = valuesMean+err(values),
+#                         lower = valuesMean-err(values)
+#                         )
+
+# dF.stacked.plot <- data.frame(dF.stacked.plot, unique=seq(length(dF.stacked.plot[,1])))
+
+# p <- ggplot(dF.stacked.plot, aes_string(x="unique", y="valuesMean", middle="valuesMean", group="unique", fill="gene", upper="upper", lower="lower"))
+p <- ggplot(dF.wb, aes_string(x="GS", y="values", fill="GS"))
+p <- p + geom_boxplot()
+p <- p + theme_bw()
+p <- p + labs(y="Connection strength") + theme(axis.title.x=element_blank())
+p
+```
+
+And now we'll look at individual genes.
+```{r,results='asis',echo=FALSE}
+dF.wb.summary = ddply(dF.wb, .(gene), summarise,
+                      "gene negative" = paste(round(mean(values[GS=="gene negative"], na.rm = TRUE), digits = 1),
+                                              paste("(", round(sd(values[GS=="gene negative"], na.rm = TRUE), digits = 1),   ")", sep="")),
+                      "gene positive" = paste(round(mean(values[GS=="gene positive"], na.rm = TRUE), digits = 1),
+                                              paste("(", round(sd(values[GS=="gene positive"], na.rm = TRUE), digits = 1),   ")", sep="")),
+                      "affected"      = paste(round(mean(values[GS=="affected"], na.rm = TRUE), digits = 1),
+                                              paste("(", round(sd(values[GS=="affected"], na.rm = TRUE), digits = 1),   ")", sep=""))
+                      )
+
+print(xtable(dF.wb.summary,
+             caption="Mean and standard deviations for connection strength values in individuals"),
+      include.rownames=FALSE)
+
+# # plot this
+# err <- function(x) qnorm(0.975) * sd(x, na.rm = TRUE)/sqrt(length(x)) # function for standard error
+# 
+# dF.stacked.plot = ddply(dF.stacked, .(gene, GS), summarise, valuesMean=mean(values, na.rm = TRUE),
+#                         upper = valuesMean+err(values),
+#                         lower = valuesMean-err(values)
+#                         )
+
+# dF.stacked.plot <- data.frame(dF.stacked.plot, unique=seq(length(dF.stacked.plot[,1])))
+
+# p <- ggplot(dF.stacked.plot, aes_string(x="unique", y="valuesMean", middle="valuesMean", group="unique", fill="gene", upper="upper", lower="lower"))
+p <- ggplot(dF.wb, aes_string(x="gene", y="values", fill="GS"))
+p <- p + geom_boxplot()
+p <- p + theme_bw()
+p <- p + labs(y="Connection strength") + theme(axis.title.x=element_blank())
+p
+```
+
+
