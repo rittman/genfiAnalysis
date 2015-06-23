@@ -1,0 +1,64 @@
+---
+title: "Assessing the impact of motion on connectivity"
+author: "Tim Rittman"
+date: "23/06/2015"
+output: pdf_document
+---
+
+This script is designed to assess the correlation between spike percentage and connection strength - whether it exists and what the correct cut-off for spike percentage should be in the GENFI data.
+
+```{r, echo=FALSE, results='asis'}
+library(plyr)
+library(ggplot2)
+library(xtable)
+library(xlsx)
+
+genfiDir = "/home/tim/GENFI/GENFI_camgrid_20150525/"
+setwd(genfiDir)
+
+inFile = "d2_degree_wt_local"
+
+# import data
+dF = read.table(inFile, header = TRUE, na.strings = "NA")
+
+# convert diagnostic label to a factor and rename
+dF$GS = as.factor(dF$GS)
+dF$GS = revalue(dF$GS, c("0" = "gene negative", "1"="gene positive", "2"="affected"))
+
+
+nodeNames = names(dF)[sapply(names(dF), function(x) grepl("X",x))]
+
+# Re
+dF.stacked = stack(dF[,nodeNames])
+dF.stacked = data.frame(dF.stacked, GS=dF$GS, gene=dF$gene, wbic=dF$wbic)
+
+dF.wb = ddply(dF.stacked, .(gene, wbic, GS), summarise,
+              values = mean(values, na.rm = TRUE)
+              )
+
+# import file with spike percentage data
+sp <- read.xlsx("../all_sm_thld10_SP.xlsx", sheetIndex = 1)
+sp.sub <- data.frame(wbic=sp$id, spMean=sp$mean)
+dF.sp <- merge(dF.wb, sp.sub, by="wbic")
+
+```
+
+We'll plot the correlation value between the connection strength and spike percentage for various thresholds of spike percentage
+
+```{r, echo=FALSE, results='asis'}
+getCorr <- function(n,x){
+  ct <- cor(x[x$spMean<n,"spMean"], x[x$spMean<n,"values"])
+  return(ct)
+}
+
+cutOffs <- seq(2,40, by=1)
+ctVals <- sapply(cutOffs, getCorr, x=dF.sp)
+
+# plot the results
+dF.plot <- data.frame(cutOffs=cutOffs, ctVals=ctVals)
+
+p <- ggplot(dF.plot, aes_string(x="cutOffs", y="ctVals"))
+p <-p + geom_line()
+p
+
+```

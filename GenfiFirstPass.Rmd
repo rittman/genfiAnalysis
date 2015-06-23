@@ -17,7 +17,6 @@ setwd(genfiDir)
 
 inFile = "d2_degree_wt_local"
 # import data
-
 dF = read.table(inFile, header = TRUE, na.strings = "NA")
 
 # convert diagnostic label to a factor and rename
@@ -35,6 +34,32 @@ print(xtable(ptSum,
              caption="Subjects included in the analysis"),
       include.rownames=FALSE)
 
+# set spike percentage threshold
+spVal = 10  # would be better to define this using a Bayesian model averaging method
+```
+The spike percentage threshod is set at `r spVal`.
+
+So that leaves us with the following subjects included:
+```{r,results='asis',echo=FALSE}
+library(xlsx)
+
+# import file with spike percentage data
+sp <- read.xlsx("../all_sm_thld10_SP.xlsx", sheetIndex = 1)
+sp.sub <- data.frame(wbic=sp$id, spMean=sp$mean)
+dF <- merge(dF, sp.sub, by="wbic")
+
+dF <- dF[dF$spMean < spVal,]
+
+# Summarise the patient data
+ptSum = ddply(dF, .(gene), summarise,
+              "gene negative" = length(GS[GS=="gene negative"]),
+              "gene positive" = length(GS[GS=="gene positive"]),
+              "affected"      = length(GS[GS=="affected"])
+              )
+
+print(xtable(ptSum,
+             caption="Subjects included in the analysis"),
+      include.rownames=FALSE)
 ```
 
 As a first pass, I will examine the connection strength in each of these groups. Firstly, we'll look at the mean connection strength for the whole brain. In order to do this, we'll take the mean connection strength of each individual.
@@ -42,7 +67,7 @@ As a first pass, I will examine the connection strength in each of these groups.
 ```{r,results='asis',echo=FALSE}
 nodeNames = names(dF)[sapply(names(dF), function(x) grepl("X",x))]
 
-# Re
+# Take the mean values of 
 dF.stacked = stack(dF[,nodeNames])
 dF.stacked = data.frame(dF.stacked, GS=dF$GS, gene=dF$gene, wbic=dF$wbic)
 
@@ -131,5 +156,8 @@ dF.aoo <- data.frame(wbic=genfiData$Subject,
 dF <- merge(dF.wb, dF.aoo, by="wbic")
 dF.plot <- dF[dF$GS!="gene negative",]
 
+p <- ggplot(dF.plot, aes_string(x="aoo", y="values", fill="gene"))
+p <- p + geom_point()
+p
 
 ```
