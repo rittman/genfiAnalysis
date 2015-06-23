@@ -118,4 +118,18 @@ p <- p + labs(y="Connection strength") + theme(axis.title.x=element_blank())
 p
 ```
 
+We'll plot the connection strengths against the time from average age at onset.
 
+```{r, echo=FALSE, results='asis'}
+genfiData <- read.table("../genfi_Subjects_sjones_1_22_2015_17_47_47_restructure_summary.csv",
+                        sep="\t",
+                        header = TRUE)
+
+dF.aoo <- data.frame(wbic=genfiData$Subject,
+                     aoo=genfiData$Yrs.from.AV_AAO)
+
+dF <- merge(dF.wb, dF.aoo, by="wbic")
+dF.plot <- dF[dF$GS!="gene negative",]
+
+
+```
