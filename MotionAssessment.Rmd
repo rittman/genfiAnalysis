@@ -43,22 +43,39 @@ dF.sp <- merge(dF.wb, sp.sub, by="wbic")
 
 ```
 
-We'll plot the correlation value between the connection strength and spike percentage for various thresholds of spike percentage
+We'll plot the correlation value between the connection strength and spike percentage for various thresholds of spike percentage.
+
+The first plot shows the variation with spike percentage threshold of the Pearson correlation coefficient between connection strength and spike percentage.
+
+The second plot shows the p-value of this correlation as the spike percentage threshold varies. The dashed line represents a significant value of 0.05.
 
 ```{r, echo=FALSE, results='asis'}
 getCorr <- function(n,x){
-  ct <- cor(x[x$spMean<n,"spMean"], x[x$spMean<n,"values"])
-  return(ct)
+  ct <- cor.test(x[x$spMean<n,"spMean"], x[x$spMean<n,"values"])
+  return(list(ct[["statistic"]][[1]],
+              ct[["p.value"]][[1]])
+         )
 }
 
 cutOffs <- seq(2,40, by=1)
 ctVals <- sapply(cutOffs, getCorr, x=dF.sp)
+dF.ctVals <- data.frame(matrix(unlist(ctVals), byrow = TRUE, ncol = length(ctVals[,1])))
+names(dF.ctVals) <- c("r", "p")
 
 # plot the results
-dF.plot <- data.frame(cutOffs=cutOffs, ctVals=ctVals)
+dF.plot <- data.frame(cutOffs=cutOffs, dF.ctVals)
 
-p <- ggplot(dF.plot, aes_string(x="cutOffs", y="ctVals"))
-p <-p + geom_line()
+p <- ggplot(dF.plot, aes_string(x="cutOffs", y="r"))
+p <- p + geom_line()
+p <- p + theme_bw()
+p <- p + labs(y="correlation coefficient", x="spike percentage threshold")
+p
+
+p <- ggplot(dF.plot, aes_string(x="cutOffs", y="p"))
+p <- p + geom_line(colour="red")
+p <- p + geom_hline(y=0.05, linetype="dashed", colour="black")
+p <- p + theme_bw()
+p <- p + labs(y="p-value", x="spike percentage threshold")
 p
 
 ```

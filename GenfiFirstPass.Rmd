@@ -156,7 +156,7 @@ dF.aoo <- data.frame(wbic=genfiData$Subject,
 dF <- merge(dF.wb, dF.aoo, by="wbic")
 dF.plot <- dF[dF$GS!="gene negative",]
 
-p <- ggplot(dF.plot, aes_string(x="aoo", y="values", fill="gene"))
+p <- ggplot(dF.plot, aes_string(x="aoo", y="values", colour="gene", shape="GS"))
 p <- p + geom_point()
 p
 
