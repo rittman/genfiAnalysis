@@ -11,6 +11,7 @@ A first investigation of the GENFI data. The aim is to assess the connection str
 library(plyr)
 library(ggplot2)
 library(xtable)
+library(car)
 
 genfiDir = "/home/tim/GENFI/GENFI_camgrid_20150525/"
 setwd(genfiDir)
@@ -103,6 +104,13 @@ print(xtable(dF.wb.summary[,-1],
 # dF.stacked.plot <- data.frame(dF.stacked.plot, unique=seq(length(dF.stacked.plot[,1])))
 
 # p <- ggplot(dF.stacked.plot, aes_string(x="unique", y="valuesMean", middle="valuesMean", group="unique", fill="gene", upper="upper", lower="lower"))
+
+# ANOVA of the differences
+mod <- lm(values~GS*gene)
+mod.aov <- anova(mod)
+print(xtable(mod.aov))
+
+# now do a plot
 p <- ggplot(dF.wb, aes_string(x="GS", y="values", fill="GS"))
 p <- p + geom_boxplot()
 p <- p + theme_bw()
@@ -156,6 +164,23 @@ dF.aoo <- data.frame(wbic=genfiData$Subject,
 dF <- merge(dF.wb, dF.aoo, by="wbic")
 dF.plot <- dF[dF$GS!="gene negative",]
 
+# correlation between average age at onset and connection strength
+corac <- cor.test(dF.plot$aoo, dF.plot$values)
+corac.affected <- cor.test(dF[dF$GS=="affected","aoo"],
+                           dF[dF$GS=="affected","values"])
+
+corac.carriers <- cor.test(dF[dF$GS=="gene positive","aoo"],
+                           dF[dF$GS=="gene positive","values"])
+
+```
+The correlation coefficient between connection strength and average age at onset for affected and gene carriers is `r corac$statistic`, p=`r corac$p.value`.
+
+For gene carriers the correlation coefficient is `r corac.carriers$statistic`, p=`r corac.carriers$p.value`
+
+For affected subjects the correlation coefficient is `r corac.affected$statistic`, p=`r corac.affected$p.value`.
+
+
+```{r,results='asis',echo=FALSE}
 p <- ggplot(dF.plot, aes_string(x="aoo", y="values", colour="gene", shape="GS"))
 p <- p + geom_point()
 p
