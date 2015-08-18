@@ -11,6 +11,23 @@ library(xlsx)
 genfiDir = "/home/tim/GENFI/GENFI_camgrid_20150525/"
 setwd(genfiDir)
 
+dotTests <- function(gslist, dF){
+  tRes <- t.test(dF[dF$GS==gslist[[1]],"values"], dF[dF$GS==gslist[[2]],"values"])
+  return(list(paste(gslist, collapse = "/"),
+              tRes$statistic,
+              tRes$p.value))
+}
+
+
+# formatting function for numbers
+fn <- function(x,a=1,b=2){
+  if(x>=10){
+    return(round(x,digits=a))
+  } else {
+    return(signif(x, digits=b))
+  }
+}
+
 wholeBrainAnalysis <- function(metric, metricName, sp, weighted=TRUE, outDir="wholeBrainResults"){
   if(weighted){
     metric = paste(metric,"wt",sep="_")
@@ -29,7 +46,7 @@ wholeBrainAnalysis <- function(metric, metricName, sp, weighted=TRUE, outDir="wh
   
   header = c("\\documentclass[a4paper,10pt]{article}",
              "\\usepackage[utf8]{inputenc}",
-             "\\title{GENFI data}",
+             paste("\\title{GENFI data,",metricName,"}"),
              "\\author{Timothy Rittman}",
              "\\date{}",
              "\\pdfinfo{%",
@@ -106,12 +123,12 @@ wholeBrainAnalysis <- function(metric, metricName, sp, weighted=TRUE, outDir="wh
   }
   
   dF.wb.summary = ddply(dF.wb, .(), summarise,
-                        "gene negative" = paste(signif(mean(values[GS=="gene negative"], na.rm = TRUE), digits = 2),
-                                                paste("(", signif(sd(values[GS=="gene negative"], na.rm = TRUE), digits = 2),   ")", sep="")),
-                        "gene positive" = paste(signif(mean(values[GS=="gene positive"], na.rm = TRUE), digits = 2),
-                                                paste("(", signif(sd(values[GS=="gene positive"], na.rm = TRUE), digits = 2),   ")", sep="")),
-                        "affected"      = paste(signif(mean(values[GS=="affected"], na.rm = TRUE), digits = 2),
-                                                paste("(", signif(sd(values[GS=="affected"], na.rm = TRUE), digits = 2),   ")", sep=""))
+                        "gene negative" = paste(sapply(mean(values[GS=="gene negative"], na.rm = TRUE), fn, a=2,b=3),
+                                                paste("(", sapply(sd(values[GS=="gene negative"], na.rm = TRUE), fn, a=2,b=3),   ")", sep="")),
+                        "gene positive" = paste(sapply(mean(values[GS=="gene positive"], na.rm = TRUE), fn, a=2,b=3),
+                                                paste("(", sapply(sd(values[GS=="gene positive"], na.rm = TRUE),fn, a=2,b=3),   ")", sep="")),
+                        "affected"      = paste(sapply(mean(values[GS=="affected"], na.rm = TRUE),fn, a=2,b=3),
+                                                paste("(", sapply(sd(values[GS=="affected"], na.rm = TRUE),fn, a=2,b=3),   ")", sep=""))
   )
   
   print(xtable(dF.wb.summary[,-1],
@@ -123,10 +140,37 @@ wholeBrainAnalysis <- function(metric, metricName, sp, weighted=TRUE, outDir="wh
   # ANOVA of the differences
   mod <- lm(values~GS*gene, data=dF.wb)
   mod.aov <- anova(mod)
-  print(xtable(mod.aov),
+  print(xtable(mod.aov,
+               digits = c(0,0,2,2,1,2),
+               display = c("s","d", "fg", "fg", "f", "fg")),
+        include.rownames=TRUE,
+        file=outFile,
+        append=TRUE)
+  
+  #### post hoc t-tests ####
+  # group pairwise
+  pwGS <- combn(levels(dF.wb$GS),2)
+  pwTtests <- apply(pwGS, 2, function(x) dotTests(x,dF.wb))
+  pwTtests <- data.frame(matrix(unlist(pwTtests), nrow = length(pwTtests), byrow = TRUE))
+  names(pwTtests) <- c("comparison", "t", "p")
+  print(xtable(pwTtests,
+               caption="Pairwise post-hoc t-test results"),
         include.rownames=FALSE,
         file=outFile,
         append=TRUE)
+  
+  # t-test for affected vs non-affected (gene negative and gene positive)
+  anTtest <- t.test(dF.wb[dF.wb$GS=="affected","values"], dF.wb[dF.wb$GS!="affected","values"])
+  print(xtable(data.frame("t"=fn(anTtest[["statistic"]]),
+                          "p"=fn(anTtest[["p.value"]])),
+               caption="t-test between affected subjects and non-affected (both gene negative and gene positive unaffected",
+               digits=c(0,2,2),
+               display=c("s","fg","fg")
+               ),
+        include.rownames=FALSE,
+        file=outFile,
+        append=TRUE)
+        
   
   # now do a plot
   p <- ggplot(dF.wb, aes_string(x="GS", y="values", fill="GS"))
@@ -139,12 +183,12 @@ wholeBrainAnalysis <- function(metric, metricName, sp, weighted=TRUE, outDir="wh
   
   
   dF.wb.summary = ddply(dF.wb, .(gene), summarise,
-                        "gene negative" = paste(signif(mean(values[GS=="gene negative"], na.rm = TRUE), digits = 2),
-                                                paste("(", signif(sd(values[GS=="gene negative"], na.rm = TRUE), digits = 2),   ")", sep="")),
-                        "gene positive" = paste(signif(mean(values[GS=="gene positive"], na.rm = TRUE), digits = 2),
-                                                paste("(", signif(sd(values[GS=="gene positive"], na.rm = TRUE), digits = 2),   ")", sep="")),
-                        "affected"      = paste(signif(mean(values[GS=="affected"], na.rm = TRUE), digits = 2),
-                                                paste("(", signif(sd(values[GS=="affected"], na.rm = TRUE), digits = 2),   ")", sep=""))
+                        "gene negative" = paste(sapply(mean(values[GS=="gene negative"], na.rm = TRUE), fn),
+                                                paste("(", sapply(sd(values[GS=="gene negative"], na.rm = TRUE),fn),   ")", sep="")),
+                        "gene positive" = paste(sapply(mean(values[GS=="gene positive"], na.rm = TRUE), fn),
+                                                paste("(", sapply(sd(values[GS=="gene positive"], na.rm = TRUE),fn),   ")", sep="")),
+                        "affected"      = paste(sapply(mean(values[GS=="affected"], na.rm = TRUE),fn),
+                                                paste("(", sapply(sd(values[GS=="affected"], na.rm = TRUE), fn),   ")", sep=""))
   )
   
   print(xtable(dF.wb.summary,
@@ -175,7 +219,7 @@ wholeBrainAnalysis <- function(metric, metricName, sp, weighted=TRUE, outDir="wh
 }
 
 # import spike percentage data
-sp <- read.xlsx("../all_sm_thld10_SP.xlsx", sheetIndex = 1)
+# sp <- read.xlsx("../all_sm_thld10_SP.xlsx", sheetIndex = 1)
 
 metrics = list("degree"="connection strength",
                "ge"="global efficiency",
@@ -186,4 +230,25 @@ metrics = list("degree"="connection strength",
                "closeCent"="closeness centrality")
 
 lapply(names(metrics), function(x) wholeBrainAnalysis(x, metrics[[x]], sp))
+
+# do metrics for unweighted graphs
+metrics = list("degree"="connection strength",
+               "degreeNorm"="connection strength",
+               "ge"="global efficiency",
+               "geNorm"="global efficiency",
+               "le"="local efficiency",
+               "leNorm"="local efficiency",
+               "pl"="path length",
+               "plNorm"="path length",
+               "eigCentNP"="eigen centrality",
+               "eigCentNorm"="eigen centrality",
+               "betCent"="betweenness centrality",
+               "betCentNorm"="betweenness centrality",
+               "closeCent"="closeness centrality",
+               "closeCentNorm"="closeness centrality")
+
+lapply(names(metrics), function(x) wholeBrainAnalysis(x, metrics[[x]], sp, weighted=FALSE))
+
+
+
 
