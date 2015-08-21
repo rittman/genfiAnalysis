@@ -17,7 +17,7 @@ nodeTtest <- function(vals, g1len, g2len){
 
 
 #### main functions ####
-nodeComparison <- function(dF){
+nodeComparison <- function(dF,plotName){
   # function to compare the values of gene carrier subjects and controls
   # control subjects
   conts = data.frame("GS"="Gene negative",
@@ -46,22 +46,39 @@ nodeComparison <- function(dF){
                         p.adj=p.adjust(resVals$p, method="BY"))
   
   # select only significant nodes (using corrected p-values)
-  res.plot <- resVals[resVals$p.adj<0.9,]
+  res.plot <- resVals[resVals$p<0.001,]
 
   # carry on and plot if the number of rows is 0
   if(nrow(res.plot)!=0){
     print(res.plot)
-    res.plot <- data.frame(res.plot,
-                           contMean = sapply(res.plot$nodes, function(x) mean(dF[,x][c(1:conts.len)])),
-                           contGene = sapply(res.plot$nodes, function(x) mean(dF[,x][c(1:gcs.len)]))
+    
+    # get the control mean and stuff
+    res.plot.cont <- data.frame(res.plot,
+                           Mean = sapply(res.plot$nodes, function(x) mean(dF[,x][c(1:conts.len)])),
+                           upper = sapply(res.plot$nodes, function(x) mean(dF[,x][c(1:conts.len)])) + sapply(res.plot$nodes, function(x) sd(dF[,x][c(1:conts.len)])/sqrt(length(c(1:conts.len)))),
+                           lower = sapply(res.plot$nodes, function(x) mean(dF[,x][c(1:conts.len)])) - sapply(res.plot$nodes, function(x) sd(dF[,x][c(1:conts.len)])/sqrt(length(c(1:conts.len)))),
+                           group = "Control"
                            )
     
-    res.plot <- res.plot[order(res.plot$contMean),] # reorder by the mean of hte control group
-    res.plot$nodes = factor(res.plot$nodes, levels=res.plot$nodes)
-    p <- ggplot(res.plot, aes_string(x="nodes",y="contMean"))
-    p <- p + geom_point()
+    # now get the same for gene carriers
+    res.plot.gcs <- data.frame(res.plot,
+                               Mean = sapply(res.plot$nodes, function(x) mean(dF[,x][c((conts.len+1):gcs.len)])),
+                               upper = sapply(res.plot$nodes, function(x) mean(dF[,x][c((conts.len+1):gcs.len)])) + sapply(res.plot$nodes, function(x) sd(dF[,x][c((conts.len+1):gcs.len)])/sqrt(length(c((conts.len+1):gcs.len)))),
+                               lower = sapply(res.plot$nodes, function(x) mean(dF[,x][c((conts.len+1):gcs.len)])) - sapply(res.plot$nodes, function(x) sd(dF[,x][c((conts.len+1):gcs.len)])/sqrt(length(c((conts.len+1):gcs.len)))),
+                               group="Gene carriers"
+    )
+    
+    # stitch the controls to the carriers
+    res.plot <- rbind(res.plot.cont, res.plot.gcs)
+    
+    res.plot <- res.plot[order(res.plot$Mean),] # reorder by the mean values
+    res.plot$nodes = factor(res.plot$nodes, levels=unique(res.plot$nodes))
+    
+    dodge = position_dodge(0.2)
+    p <- ggplot(res.plot, aes_string(x="nodes",y="Mean", group="group", colour="group"))
+    p <- p + geom_point(position=dodge) + geom_errorbar(aes_string(ymin="lower", ymax="upper"), position=dodge)
     View(res.plot)
-    ggsave("testPlot.png")
+    ggsave(paste(plotName,"png",sep="."))
   }
   
   # return the t-test results
@@ -75,7 +92,9 @@ gmList = list(#"d2_ccNorm_local",
 #               "d2_elnNorm_local",
 #               "d2_ccWt_local",
               "d2_degree_wt_local",
-              "d2_degreeWt_local"
+              "d2_degreeWt_local",
+              "d2_leNorm_local",
+              "d2_le_wt_local"
               )
 
 # select only a single percentage edge value
@@ -89,7 +108,7 @@ for(gm in gmList){
   
 #   print(apply(gm.dF, 2, function(x) !any(is.na(x))))
 #   gm.dF <- gm.dF[,apply(gm.dF, 2, function(x) !any(is.na(x)))]
-  resVals = nodeComparison(gm.dF[,-1])
+  resVals = nodeComparison(gm.dF[,-1], plotName=gm)
 }
 
 
