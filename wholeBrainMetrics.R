@@ -28,6 +28,53 @@ fn <- function(x,a=1,b=2){
   }
 }
 
+importGraphData <- function(metric){
+  # define input file
+  inFile = paste("d2",metric,"local",sep="_")
+  
+  # import data
+  dF = read.table(inFile, header = TRUE, na.strings = "NA")
+  
+  # convert diagnostic label to a factor and rename
+  dF$GS = as.factor(dF$GS)
+  dF$GS = revalue(dF$GS, c("0" = "gene negative", "1"="gene positive", "2"="affected"))
+  
+  # return dataframe with graph metrics
+  return(dF)
+}
+
+applySP <- function(dF, sp, spVal=10){
+  # combine data with spike percentage data
+  sp.sub <- data.frame(wbic=sp$id, spMean=sp$mean)
+  dF <- merge(dF, sp.sub, by="wbic")
+  
+  # filter by spike percentage
+  dF <- dF[dF$spMean < spVal,]
+  
+  # return filtered data
+  return(dF)
+}
+
+stackIT <- function(dF){
+  # Sort out stacking the nodes up if nodewise measure
+  nodeNames = names(dF)[sapply(names(dF), function(x) grepl("X",x))]
+  
+  if(length(nodeNames)>0){
+    # Take the mean values of
+    dF.stacked = stack(dF[,nodeNames])
+    dF.stacked = data.frame(dF.stacked, GS=dF$GS, gene=dF$gene, wbic=dF$wbic)
+    
+    dF.wb = ddply(dF.stacked, .(gene, wbic, GS), summarise,
+                  values = mean(values, na.rm = TRUE)
+    )
+  } else {
+    dF.wb <- dF
+    names(dF.wb)[names(dF.wb)==metric] <- "values"
+  }
+  
+  return(dF.wb)
+}
+
 wholeBrainAnalysis <- function(metric, metricName, sp, weighted=TRUE, outDir="wholeBrainResults"){
   if(weighted){
     metric = paste(metric,"wt",sep="_")
@@ -35,9 +82,6 @@ wholeBrainAnalysis <- function(metric, metricName, sp, weighted=TRUE, outDir="wh
   
   # create output directory
   dir.create(outDir, showWarnings = FALSE)
-  
-  # define input file
-  inFile = paste("d2",metric,"local",sep="_")
   
   # define log output file
   outFile = paste(outDir,
@@ -64,12 +108,7 @@ wholeBrainAnalysis <- function(metric, metricName, sp, weighted=TRUE, outDir="wh
         file=outFile,
         append=FALSE)
   
-  # import data
-  dF = read.table(inFile, header = TRUE, na.strings = "NA")
-  
-  # convert diagnostic label to a factor and rename
-  dF$GS = as.factor(dF$GS)
-  dF$GS = revalue(dF$GS, c("0" = "gene negative", "1"="gene positive", "2"="affected"))
+  dF <- importGraphData(metric)
   
   # Summarise the patient data
   ptSum = ddply(dF, .(gene), summarise,
@@ -84,14 +123,8 @@ wholeBrainAnalysis <- function(metric, metricName, sp, weighted=TRUE, outDir="wh
         file=outFile,
         append=TRUE)
   
-  # set spike percentage threshold
-  spVal = 10  # would be better to define this using a Bayesian model averaging method
-
-  # import file with spike percentage data
-  sp.sub <- data.frame(wbic=sp$id, spMean=sp$mean)
-  dF <- merge(dF, sp.sub, by="wbic")
-  
-  dF <- dF[dF$spMean < spVal,]
+  # apply spike percentage threshold
+  dF <- applySP(dF, sp)
   
   # Summarise the patient data
   ptSum = ddply(dF, .(gene), summarise,
@@ -106,21 +139,8 @@ wholeBrainAnalysis <- function(metric, metricName, sp, weighted=TRUE, outDir="wh
         file=outFile,
         append=TRUE)
   
-  # Sort out stacking the nodes up if nodewise measure
-  nodeNames = names(dF)[sapply(names(dF), function(x) grepl("X",x))]
-  
-  if(length(nodeNames)>0){
-    # Take the mean values of
-    dF.stacked = stack(dF[,nodeNames])
-    dF.stacked = data.frame(dF.stacked, GS=dF$GS, gene=dF$gene, wbic=dF$wbic)
-    
-    dF.wb = ddply(dF.stacked, .(gene, wbic, GS), summarise,
-                  values = mean(values, na.rm = TRUE)
-    )
-  } else {
-    dF.wb <- dF
-    names(dF.wb)[names(dF.wb)==metric] <- "values"
-  }
+  # stack data and take the mean if it is a node-wise measures
+  dF.wb(stackIt(dF))
   
   dF.wb.summary = ddply(dF.wb, .(), summarise,
                         "gene negative" = paste(sapply(mean(values[GS=="gene negative"], na.rm = TRUE), fn, a=2,b=3),
@@ -129,7 +149,8 @@ wholeBrainAnalysis <- function(metric, metricName, sp, weighted=TRUE, outDir="wh
                                                 paste("(", sapply(sd(values[GS=="gene positive"], na.rm = TRUE),fn, a=2,b=3),   ")", sep="")),
                         "affected"      = paste(sapply(mean(values[GS=="affected"], na.rm = TRUE),fn, a=2,b=3),
                                                 paste("(", sapply(sd(values[GS=="affected"], na.rm = TRUE),fn, a=2,b=3),   ")", sep=""))
-  )
+                        )
+  
   
   print(xtable(dF.wb.summary[,-1],
                caption=paste("Mean and standard deviations for",metricName,"values in individuals")),
@@ -218,6 +239,57 @@ wholeBrainAnalysis <- function(metric, metricName, sp, weighted=TRUE, outDir="wh
   write("\\end{document}", file=outFile, append=TRUE)
 }
 
+
+graphTimeComarison <- function(metric, metricName, sp, weighted=TRUE, outDir="wholeBrainVsAOOResults"){
+  if(weighted){
+    metric = paste(metric,"wt",sep="_")
+  }
+  
+  # create output directory
+  dir.create(outDir, showWarnings = FALSE)
+  
+  ### function to plot and analyse the relationship between graph metrics and expected time to disease onset
+  # import graph metric data
+  dF <- importGraphData(metric)
+  
+  # filter by spike percentage
+  dF <- applySP(dF, sp)
+  
+  # stack the data and take mean if a nodewise measure
+  dF <- stackIT(dF)
+  View(dF)
+  
+  # get age of onset data
+  genfiData <- read.table("../genfi_Subjects_sjones_1_22_2015_17_47_47_restructure_summary.csv",
+                          sep="\t",
+                          header = TRUE)
+  
+  dF.aoo <- data.frame(wbic=genfiData$Subject,
+                       aoo=genfiData$Yrs.from.AV_AAO)
+  
+  # merge age of onset data
+  dF <- merge(dF, dF.aoo, by="wbic")
+  
+  dF.plot <- dF[dF$GS!="gene negative",]
+  View(dF.plot)
+  
+  # correlation between average age at onset and connection strength
+  corac <- cor.test(dF.plot$aoo, dF.plot$values)
+  corac.affected <- cor.test(dF[dF$GS=="affected","aoo"],
+                             dF[dF$GS=="affected","values"])
+  
+  corac.carriers <- cor.test(dF[dF$GS=="gene positive","aoo"],
+                             dF[dF$GS=="gene positive","values"])
+  print(corac.affected)
+  print(corac.carriers)
+  
+  p <- ggplot(dF.plot, aes_string(x="aoo", y="values", colour="GS"))
+  p <- p + geom_point()
+  return(p)
+  
+  
+}
+
 # import spike percentage data
 # sp <- read.xlsx("../all_sm_thld10_SP.xlsx", sheetIndex = 1)
 
@@ -229,7 +301,7 @@ metrics = list("degree"="connection strength",
                "betCent"="betweenness centrality",
                "closeCent"="closeness centrality")
 
-lapply(names(metrics), function(x) wholeBrainAnalysis(x, metrics[[x]], sp))
+# lapply(names(metrics), function(x) wholeBrainAnalysis(x, metrics[[x]], sp))
 
 # do metrics for unweighted graphs
 metrics = list("degree"="connection strength",
@@ -247,8 +319,9 @@ metrics = list("degree"="connection strength",
                "closeCent"="closeness centrality",
                "closeCentNorm"="closeness centrality")
 
-lapply(names(metrics), function(x) wholeBrainAnalysis(x, metrics[[x]], sp, weighted=FALSE))
-
+# lapply(names(metrics), function(x) wholeBrainAnalysis(x, metrics[[x]], sp, weighted=FALSE))
+# lapply(names(metrics), function(x) graphTimeComarison(x, metrics[[x]], sp, weighted=FALSE))
+aa <- graphTimeComarison("leNorm", "local efficiency", sp, weighted=FALSE)
 
 
 
