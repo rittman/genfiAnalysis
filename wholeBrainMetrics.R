@@ -7,17 +7,18 @@ library(ggplot2)
 library(xtable)
 library(car)
 library(xlsx)
+library(lme4)
 
 genfiDir = "/home/tim/GENFI/GENFI_camgrid_20150525/"
 setwd(genfiDir)
 
+#### helper functions ####
 dotTests <- function(gslist, dF){
   tRes <- t.test(dF[dF$GS==gslist[[1]],"values"], dF[dF$GS==gslist[[2]],"values"])
   return(list(paste(gslist, collapse = "/"),
               tRes$statistic,
               tRes$p.value))
 }
-
 
 # formatting function for numbers
 fn <- function(x,a=1,b=2){
@@ -28,16 +29,22 @@ fn <- function(x,a=1,b=2){
   }
 }
 
-importGraphData <- function(metric){
+importGraphData <- function(metric, weighted, edgePC=3){
   # define input file
   inFile = paste("d2",metric,"local",sep="_")
   
   # import data
   dF = read.table(inFile, header = TRUE, na.strings = "NA")
   
+  # select only the desired percentage edge threshold if unweighted metric
+  if(!weighted){
+    dF <- dF[dF$edgePC==edgePC,]
+  }
+  
   # convert diagnostic label to a factor and rename
   dF$GS = as.factor(dF$GS)
   dF$GS = revalue(dF$GS, c("0" = "gene negative", "1"="gene positive", "2"="affected"))
+  dF$site = as.factor(dF$site)
   
   # return dataframe with graph metrics
   return(dF)
@@ -55,16 +62,16 @@ applySP <- function(dF, sp, spVal=10){
   return(dF)
 }
 
-stackIT <- function(dF){
+stackIt <- function(dF, metric){
   # Sort out stacking the nodes up if nodewise measure
   nodeNames = names(dF)[sapply(names(dF), function(x) grepl("X",x))]
   
   if(length(nodeNames)>0){
     # Take the mean values of
     dF.stacked = stack(dF[,nodeNames])
-    dF.stacked = data.frame(dF.stacked, GS=dF$GS, gene=dF$gene, wbic=dF$wbic)
+    dF.stacked = data.frame(dF.stacked, GS=dF$GS, gene=dF$gene, wbic=dF$wbic, site=dF$site, Family=dF$Family)
     
-    dF.wb = ddply(dF.stacked, .(gene, wbic, GS), summarise,
+    dF.wb = ddply(dF.stacked, .(gene, wbic, GS, site, Family), summarise,
                   values = mean(values, na.rm = TRUE)
     )
   } else {
@@ -75,19 +82,7 @@ stackIT <- function(dF){
   return(dF.wb)
 }
 
-wholeBrainAnalysis <- function(metric, metricName, sp, weighted=TRUE, outDir="wholeBrainResults"){
-  if(weighted){
-    metric = paste(metric,"wt",sep="_")
-  }
-  
-  # create output directory
-  dir.create(outDir, showWarnings = FALSE)
-  
-  # define log output file
-  outFile = paste(outDir,
-                  paste(metric,"logFile.tex",sep="_"),
-                  sep="/")
-  
+initiateLog <- function(outFile, metricName){
   header = c("\\documentclass[a4paper,10pt]{article}",
              "\\usepackage[utf8]{inputenc}",
              paste("\\title{GENFI data,",metricName,"}"),
@@ -107,8 +102,36 @@ wholeBrainAnalysis <- function(metric, metricName, sp, weighted=TRUE, outDir="wh
   write(paste(header, collapse="\n"),
         file=outFile,
         append=FALSE)
+}
+
+endLog <- function(outFile){
+  write("\\end{document}", file=outFile, append=TRUE)
+}
+
+
+#### main functions ####
+wholeBrainAnalysis <- function(metric,
+                               metricName,
+                               sp, weighted=TRUE,
+                               outDir="wholeBrainResults",
+                               edgePC=3){
+  if(weighted){
+    metric = paste(metric,"wt",sep="_")
+  }
   
-  dF <- importGraphData(metric)
+  # create output directory
+  dir.create(outDir, showWarnings = FALSE)
+  
+  # define log output file
+  outFile = paste(outDir,
+                  paste(metric,"logFile.tex",sep="_"),
+                  sep="/")
+  
+  # create log file
+  initiateLog(outFile, metricName)
+  
+  # import graph data
+  dF <- importGraphData(metric, weighted, edgePC)
   
   # Summarise the patient data
   ptSum = ddply(dF, .(gene), summarise,
@@ -140,7 +163,7 @@ wholeBrainAnalysis <- function(metric, metricName, sp, weighted=TRUE, outDir="wh
         append=TRUE)
   
   # stack data and take the mean if it is a node-wise measures
-  dF.wb(stackIt(dF))
+  dF.wb <- stackIt(dF, metric)
   
   dF.wb.summary = ddply(dF.wb, .(), summarise,
                         "gene negative" = paste(sapply(mean(values[GS=="gene negative"], na.rm = TRUE), fn, a=2,b=3),
@@ -236,11 +259,17 @@ wholeBrainAnalysis <- function(metric, metricName, sp, weighted=TRUE, outDir="wh
                paste(metric,"byGene.png",sep="_"),
                sep="/"))
   
-  write("\\end{document}", file=outFile, append=TRUE)
+  endLog(outFile)
 }
 
 
-graphTimeComarison <- function(metric, metricName, sp, weighted=TRUE, outDir="wholeBrainVsAOOResults"){
+graphTimeComarison <- function(metric,
+                               metricName,
+                               sp,
+                               weighted=TRUE,
+                               outDir="wholeBrainVsAOOResults",
+                               edgePC=3){
+  print(metricName)
   if(weighted){
     metric = paste(metric,"wt",sep="_")
   }
@@ -248,16 +277,23 @@ graphTimeComarison <- function(metric, metricName, sp, weighted=TRUE, outDir="wh
   # create output directory
   dir.create(outDir, showWarnings = FALSE)
   
+  # define log output file
+  outFile = paste(outDir,
+                  paste(metric,"logFile.tex",sep="_"),
+                  sep="/")
+  
+  # create log file
+  initiateLog(outFile, metricName)
+  
   ### function to plot and analyse the relationship between graph metrics and expected time to disease onset
   # import graph metric data
-  dF <- importGraphData(metric)
+  dF <- importGraphData(metric, weighted, edgePC)
   
   # filter by spike percentage
   dF <- applySP(dF, sp)
   
   # stack the data and take mean if a nodewise measure
-  dF <- stackIT(dF)
-  View(dF)
+  dF <- stackIt(dF, metric)
   
   # get age of onset data
   genfiData <- read.table("../genfi_Subjects_sjones_1_22_2015_17_47_47_restructure_summary.csv",
@@ -270,24 +306,91 @@ graphTimeComarison <- function(metric, metricName, sp, weighted=TRUE, outDir="wh
   # merge age of onset data
   dF <- merge(dF, dF.aoo, by="wbic")
   
-  dF.plot <- dF[dF$GS!="gene negative",]
-  View(dF.plot)
+  dF <- dF[dF$GS!="affected",] # remove affected subjects
+  dF.plot <- dF
   
-  # correlation between average age at onset and connection strength
-  corac <- cor.test(dF.plot$aoo, dF.plot$values)
-  corac.affected <- cor.test(dF[dF$GS=="affected","aoo"],
-                             dF[dF$GS=="affected","values"])
+  # create linear models comparins average age at onset and the graph metric of interest
+#   lm.controls <- lm(x~y,
+#                     data=data.frame(x=dF[dF$GS=="gene negative","aoo"],
+#                                     y=dF[dF$GS=="gene negative","values"]))
+#   lm.controls <- summary(lm.controls)
+#   
+#   lm.affected <- lm(x~y,
+#                     data=data.frame(x=dF[dF$GS=="affected","aoo"],
+#                                     y=dF[dF$GS=="affected","values"]))
+#   lm.affected <- summary(lm.affected)
+# 
+#   lm.carriers <- lm(x~y,
+#                     data=data.frame(x=dF[dF$GS=="gene positive","aoo"],
+#                                     y=dF[dF$GS=="gene positive","values"]))
+#   lm.carriers <- summary(lm.carriers)
+# 
+
+  lm.all <- lm(values ~ aoo*GS, data=dF)
+
+  print(xtable(summary(lm.all),
+               caption=paste("summary of linear model for the interaction between estimated age of onset (aoo) and gene status (GS) on", metricName),
+               digits=c(0,2,2,2,2),
+               display=c("s","fg","fg","fg","g")
+  ),
+  include.rownames=TRUE,
+  file=outFile,
+  append=TRUE)
+
+  # now run linear mixed effects model model
+  # run model
+  mod <- lmer(values ~ aoo + GS + (1 | Family) + (1 | site),
+              data=dF,
+              REML=FALSE)
+  print(xtable(summary(mod)[["coefficients"]],
+               caption="Linear mixed effects model, fixed effects",
+               digits=c(0,2,2,2),
+               display=c("s","fg","fg","fg")
+  ),
+  include.rownames=TRUE,
+  file=outFile,
+  append=TRUE)
+
+  print(xtable(data.frame(StdDev = c(attributes(VarCorr(mod)[[1]])[["stddev"]],
+                                     attributes(VarCorr(mod)[[2]])[["stddev"]],
+                                     attributes(VarCorr(mod))[["sc"]]),
+                          row.names = c("Family", "Site", "Residual")),                          
+               caption="Linear mixed effects model, random effects",
+               digits=c(0,2),
+               display=c("s","fg")
+  ),
+  include.rownames=TRUE,
+  file=outFile,
+  append=TRUE)
+
+  # null model
+  nulMod <- lmer(values ~ aoo + (1 | Family) + (1 | site),
+                 data=dF,
+                 REML=FALSE)
+
+  modComparison <- anova(mod,nulMod)
   
-  corac.carriers <- cor.test(dF[dF$GS=="gene positive","aoo"],
-                             dF[dF$GS=="gene positive","values"])
-  print(corac.affected)
-  print(corac.carriers)
+  print(xtable(modComparison,
+               caption = "ANOVA between model and null model to account for variance explained by the gene status",
+               digits = c(0,0,2,2,2,2,2,2,2),
+               display = c("s","d","fg","fg","fg","fg","d","fg","fg"),
+  ),
+  include.rownames=TRUE,
+  file=outFile,
+  append=TRUE)
   
-  p <- ggplot(dF.plot, aes_string(x="aoo", y="values", colour="GS"))
+  p <- ggplot(dF.plot, aes_string(x="aoo", y="values", colour="GS", group="GS"))
   p <- p + geom_point()
-  return(p)
+  p <- p + geom_smooth(method="lm")
+  p <- p + theme_bw()
+  p <- p + labs(y=metricName) + theme(axis.title.x=element_blank())
+
+  ggsave(paste(outDir,
+               paste(metric,"png",sep="."),
+               sep="/"))
   
-  
+  endLog(outFile)
+
 }
 
 # import spike percentage data
@@ -301,27 +404,24 @@ metrics = list("degree"="connection strength",
                "betCent"="betweenness centrality",
                "closeCent"="closeness centrality")
 
-# lapply(names(metrics), function(x) wholeBrainAnalysis(x, metrics[[x]], sp))
+lapply(names(metrics), function(x) wholeBrainAnalysis(x, metrics[[x]], sp))
+lapply(names(metrics), function(x) graphTimeComarison(x, metrics[[x]], sp))
 
 # do metrics for unweighted graphs
 metrics = list("degree"="connection strength",
-               "degreeNorm"="connection strength",
+               "degreeNorm"="connection strength (normalised)",
                "ge"="global efficiency",
-               "geNorm"="global efficiency",
+               "geNorm"="global efficiency (normalised)",
                "le"="local efficiency",
-               "leNorm"="local efficiency",
+               "leNorm"="local efficiency (normalised)",
                "pl"="path length",
-               "plNorm"="path length",
+               "plNorm"="path length (normalised)",
                "eigCentNP"="eigen centrality",
-               "eigCentNorm"="eigen centrality",
+               "eigCentNorm"="eigen centrality (normalised)",
                "betCent"="betweenness centrality",
-               "betCentNorm"="betweenness centrality",
+               "betCentNorm"="betweenness centrality (normalised)",
                "closeCent"="closeness centrality",
-               "closeCentNorm"="closeness centrality")
+               "closeCentNorm"="closeness centrality (normalised)")
 
-# lapply(names(metrics), function(x) wholeBrainAnalysis(x, metrics[[x]], sp, weighted=FALSE))
-# lapply(names(metrics), function(x) graphTimeComarison(x, metrics[[x]], sp, weighted=FALSE))
-aa <- graphTimeComarison("leNorm", "local efficiency", sp, weighted=FALSE)
-
-
-
+lapply(names(metrics), function(x) wholeBrainAnalysis(x, metrics[[x]], sp, weighted=FALSE))
+lapply(names(metrics), function(x) graphTimeComarison(x, metrics[[x]], sp, weighted=FALSE))
