@@ -263,9 +263,10 @@ wholeBrainAnalysis <- function(metric,
 }
 
 
-graphTimeComarison <- function(metric,
+graphTimeComparison <- function(metric,
                                metricName,
                                sp,
+                               startvec=NULL,
                                weighted=TRUE,
                                outDir="wholeBrainVsAOOResults",
                                edgePC=3){
@@ -306,7 +307,7 @@ graphTimeComarison <- function(metric,
   # merge age of onset data
   dF <- merge(dF, dF.aoo, by="wbic")
   
-  dF <- dF[dF$GS!="affected",] # remove affected subjects
+#   dF <- dF[dF$GS!="affected",] # remove affected subjects
   dF.plot <- dF
   
   # create linear models comparins average age at onset and the graph metric of interest
@@ -373,8 +374,7 @@ graphTimeComarison <- function(metric,
   print(xtable(modComparison,
                caption = "ANOVA between model and null model to account for variance explained by the gene status",
                digits = c(0,0,2,2,2,2,2,2,2),
-               display = c("s","d","fg","fg","fg","fg","d","fg","fg"),
-  ),
+               display = c("s","d","fg","fg","fg","fg","d","fg","fg")),
   include.rownames=TRUE,
   file=outFile,
   append=TRUE)
@@ -383,15 +383,56 @@ graphTimeComarison <- function(metric,
   p <- p + geom_point()
   p <- p + geom_smooth(method="lm")
   p <- p + theme_bw()
-  p <- p + labs(y=metricName) + theme(axis.title.x=element_blank())
+  p <- p + labs(y=metricName, x="Estimated age of onset") + theme(axis.title.x=element_blank())
 
   ggsave(paste(outDir,
                paste(metric,"png",sep="."),
                sep="/"))
   
-  endLog(outFile)
+  # now run non-linear effects mixed
+  # firstly, plot the values to be able to estimate starting parameters
+  if(is.null((startvec))){
 
+    affirm = "n"
+    while(affirm=="n"){
+      print(p)
+      
+      Asym = as.numeric(readline(prompt="Asymptote of the y-axis: "))
+      R0   = as.numeric(readline(prompt="the value of y when x=0: "))
+      lrc  = as.numeric(readline(prompt="natural log of the rate of decline (guess -1 if not sure): "))
+      
+      dF.temp <- data.frame(x=dF$aoo, y=SSasymp(dF$aoo, Asym, R0, lrc), GS="Start estimates")
+      p.temp <- p + geom_point(data=dF.temp, aes_string(x="x", y="y"))
+      print(p.temp)
+      affirm = readline(prompt = "Are you happy with this?(y/n)")
+    }
+    startvec = c(Asym=Asym, R0=R0, lrc=lrc)
+  }
+  
+  # run non-linear model
+  dF <- dF[dF$GS!="gene negative",]
+  dF <- cbind(dF, data.frame(aooNeg=dF$aoo*-1))
+  View(dF)
+  nlm <- nlmer(values ~ SSasymp(aooNeg, Asym, R0, lrc) ~ (Asym|gene) + (Asym|site), data=dF, start=startvec)
+  
+  print(summary(nlm))
+
+  # plot estimated values
+  x = seq(-25,45,by=1)
+  dF.nlm <- data.frame(x=x*-1, y=SSasymp(x, nlm@beta[[1]], nlm@beta[[2]], nlm@beta[[3]]), GS="Estimates")
+  p <- ggplot(data=dF.nlm, aes_string(x="x", y="y"))
+  p <- p + geom_line()
+  p <- p + theme_bw()
+  p <- p + labs(y=metricName, x="Estimated age of onset") + theme(axis.title.x=element_blank())
+  
+  ggsave(paste(outDir,
+               paste(paste(metric, "nonLinearEstimates",sep="_"),"png",sep="."),
+               sep="/"))
+  
+  endLog(outFile)
+  return(dF)
 }
+
 
 # import spike percentage data
 # sp <- read.xlsx("../all_sm_thld10_SP.xlsx", sheetIndex = 1)
@@ -404,8 +445,8 @@ metrics = list("degree"="connection strength",
                "betCent"="betweenness centrality",
                "closeCent"="closeness centrality")
 
-lapply(names(metrics), function(x) wholeBrainAnalysis(x, metrics[[x]], sp))
-lapply(names(metrics), function(x) graphTimeComarison(x, metrics[[x]], sp))
+# lapply(names(metrics), function(x) wholeBrainAnalysis(x, metrics[[x]], sp))
+# lapply(names(metrics), function(x) graphTimeComparison(x, metrics[[x]], sp))
 
 # do metrics for unweighted graphs
 metrics = list("degree"="connection strength",
@@ -423,5 +464,6 @@ metrics = list("degree"="connection strength",
                "closeCent"="closeness centrality",
                "closeCentNorm"="closeness centrality (normalised)")
 
-lapply(names(metrics), function(x) wholeBrainAnalysis(x, metrics[[x]], sp, weighted=FALSE))
-lapply(names(metrics), function(x) graphTimeComarison(x, metrics[[x]], sp, weighted=FALSE))
+# lapply(names(metrics), function(x) wholeBrainAnalysis(x, metrics[[x]], sp, weighted=FALSE))
+# lapply(names(metrics), function(x) graphTimeComparison(x, metrics[[x]], sp, weighted=FALSE))
+dF <- graphTimeComparison("geNorm", "global efficiency (normalised)", sp, startvec=c(Asym=0.9, R0=0.87,lrc=-2.), weighted=FALSE)
