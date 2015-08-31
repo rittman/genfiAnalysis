@@ -389,7 +389,7 @@ graphTimeComparison <- function(metric,
                paste(metric,"png",sep="."),
                sep="/"))
   
-  # now run non-linear effects mixed
+  # now run non-linear mixed effects model 
   # firstly, plot the values to be able to estimate starting parameters
   if(is.null((startvec))){
 
@@ -411,9 +411,13 @@ graphTimeComparison <- function(metric,
   
   # run non-linear model
   dF <- dF[dF$GS!="gene negative",]
-  dF <- cbind(dF, data.frame(aooNeg=dF$aoo*-1))
+  dF <- cbind(dF, data.frame(aooNeg=dF$aoo*-1))  # make age of onset negative so that an asymptotic fit can be achieved.
   View(dF)
-  nlm <- nlmer(values ~ SSasymp(aooNeg, Asym, R0, lrc) ~ (Asym|gene) + (Asym|site), data=dF, start=startvec)
+  
+  # The following line calculates the non-linear model
+  # the random elements take in to account the difference in graph measures depending on the scanner sit (Asym|site) and the age at onset between genes (aooNeg|gene)
+  # at present the function is an asymptote.
+  nlm <- nlmer(values ~ SSasymp(aooNeg, Asym, R0, lrc) ~ (aooNeg|gene) + (Asym|site), data=dF, start=startvec)
   
   print(summary(nlm))
 
