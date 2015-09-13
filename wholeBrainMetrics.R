@@ -329,27 +329,8 @@ graphTimeComparison <- function(metric,
   
   # merge age of onset data
   dF <- merge(dF, dF.aoo, by="wbic")
-  
-#   dF <- dF[dF$GS!="affected",] # remove affected subjects
   dF.plot <- dF
   
-  # create linear models comparins average age at onset and the graph metric of interest
-#   lm.controls <- lm(x~y,
-#                     data=data.frame(x=dF[dF$GS=="gene negative","aoo"],
-#                                     y=dF[dF$GS=="gene negative","values"]))
-#   lm.controls <- summary(lm.controls)
-#   
-#   lm.affected <- lm(x~y,
-#                     data=data.frame(x=dF[dF$GS=="affected","aoo"],
-#                                     y=dF[dF$GS=="affected","values"]))
-#   lm.affected <- summary(lm.affected)
-# 
-#   lm.carriers <- lm(x~y,
-#                     data=data.frame(x=dF[dF$GS=="gene positive","aoo"],
-#                                     y=dF[dF$GS=="gene positive","values"]))
-#   lm.carriers <- summary(lm.carriers)
-# 
-
   lm.all <- lm(values ~ aoo*GS, data=dF)
 
   print(xtable(summary(lm.all),
@@ -450,17 +431,17 @@ graphTimeComparison <- function(metric,
   # the random elements take in to account the difference in graph measures depending on the scanner site (Asym|site) and the age at onset between genes (aooNeg|gene)
   # at present the function is an asymptote.
 
-  nlm <- nlmer(values ~ SSquadFun(aoo, aq, bq, cq) ~ (aoo|gene) + (aq|site), data=dF, start = startvec)
+  nlmq <- nlmer(values ~ SSquadFun(aoo, aq, bq, cq) ~ (aoo|gene) + (aq|site), data=dF, start = startvec)
   
-  print(summary(nlm))
+  print(summary(nlmq))
 
   # plot estimated values
   x = seq(-45,25,by=1)
-  dF.nlm <- data.frame(x=x, y=SSquadFun(x, nlm@beta[[1]], nlm@beta[[2]], nlm@beta[[3]]), GS="Estimates")
-  p <- ggplot(data=dF.nlm, aes_string(x="x", y="y"))
-  p <- p + geom_line()
-  p <- p + theme_bw()
-  p <- p + labs(y=metricName, x="Estimated time from onset")# + theme(axis.title.x=element_blank())
+  dF.nlmq <- data.frame(x=x, y=SSquadFun(x, nlmq@beta[[1]], nlmq@beta[[2]], nlmq@beta[[3]]), GS="Estimates")
+  pq <- ggplot(data=dF.nlmq, aes_string(x="x", y="y"))
+  pq <- pq + geom_line()
+  pq <- pq + theme_bw()
+  pq <- pq + labs(y=metricName, x="Estimated time from onset")# + theme(axis.title.x=element_blank())
   
   print(paste("Saving",paste(outDir,
                        paste(paste(metric, "nonLinearEstimatesQuadratic",sep="_"),"png",sep="."),
@@ -471,18 +452,15 @@ graphTimeComparison <- function(metric,
   
   # now run non-linear mixed effects model with a cubic term
   # firstly, plot the values to be able to estimate starting parameters
+  ac = nlmq@beta[[1]]
+  bc = nlmq@beta[[2]]
+  cc = nlmq@beta[[3]]
+  
   if(is.null((startvecCub))){
     
     affirm = "n"
     while(affirm=="n"){
       print(p)
-      
-      #       Asym = as.numeric(readline(prompt="Asymptote of the y-axis: "))
-      #       R0   = as.numeric(readline(prompt="the value of y when x=0: "))
-      #       lrc  = as.numeric(readline(prompt="natural log of the rate of decline (guess -1 if not sure): "))
-      ac = nlm@beta[[1]]
-      bc = nlm@beta[[2]]
-      cc = nlm@beta[[3]]
       dc = as.numeric(readline(prompt = "cubic multiplier: "))
       
       # dF.temp <- data.frame(x=dF$aoo, y=SSasymp(dF$aoo, Asym, R0, lrc), GS="Start estimates")
@@ -505,18 +483,18 @@ graphTimeComparison <- function(metric,
   # The following line calculates the non-linear model
   # the random elements take in to account the difference in graph measures depending on the scanner site (aq|site) and the age at onset between genes (aooNeg|gene)
   # this equation includes a cubic term
-  nlm <- nlmer(values ~ SScubicFun(aoo, ac, bc, cc, dc) ~ (aoo|gene) + (ac|site), data=dF, start = startvec)
+  nlmc <- nlmer(values ~ SScubicFun(aoo, ac, bc, cc, dc) ~ (aoo|gene) + (ac|site), data=dF, start = startvec)
 
   # print a summary of the model
-  print(summary(nlm))
+  print(summary(nlmc))
   
   # plot estimated values
   x = seq(-45,25,by=1)
-  dF.nlm <- data.frame(x=x, y=SScubicFun(x, nlm@beta[[1]], nlm@beta[[2]], nlm@beta[[3]], nlm@beta[[4]]), GS="Estimates")
-  p <- ggplot(data=dF.nlm, aes_string(x="x", y="y"))
-  p <- p + geom_line()
-  p <- p + theme_bw()
-  p <- p + labs(y=metricName, x="Estimated time from onset")# + theme(axis.title.x=element_blank())
+  dF.nlmc <- data.frame(x=x, y=SScubicFun(x, nlmc@beta[[1]], nlmc@beta[[2]], nlmc@beta[[3]], nlmc@beta[[4]]), GS="Estimates")
+  pc <- ggplot(data=dF.nlmc, aes_string(x="x", y="y"))
+  pc <- pc + geom_line()
+  pc <- pc + theme_bw()
+  pc <- pc + labs(y=metricName, x="Estimated time from onset")# + theme(axis.title.x=element_blank())
   
   print(paste("Saving",paste(outDir,
                              paste(paste(metric, "nonLinearEstimatesCubic",sep="_"),"png",sep="."),
@@ -524,6 +502,16 @@ graphTimeComparison <- function(metric,
   ggsave(paste(outDir,
                paste(paste(metric, "nonLinearEstimatesCubic",sep="_"),"png",sep="."),
                sep="/"))
+  
+  # now compare the quadratic and cubic equations
+  qvsc.anova <- anova(nlmq, nlmc)
+  print(xtable(qvsc.anova,
+               caption = "ANOVA between models with quadratic and cubic terms to explain rate of change in graph measure with time",
+               digits = c(0,0,2,2,2,2,2,2,2),
+               display = c("s","d","fg","fg","fg","fg","d","fg","fg")),
+        include.rownames=TRUE,
+        file=outFile,
+        append=TRUE)
   
   # finalise log file and return dataframe
   endLog(outFile)
