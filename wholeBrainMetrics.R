@@ -10,7 +10,6 @@ library(xlsx)
 library(lme4)
 
 genfiDir = "/home/tim/GENFI/GENFI_camgrid_20150525/"
-setwd(genfiDir)
 
 #### helper functions ####
 dotTests <- function(gslist, dF){
@@ -34,7 +33,7 @@ importGraphData <- function(metric, weighted, edgePC=3){
   inFile = paste("d2",metric,"local",sep="_")
   
   # import data
-  dF = read.table(inFile, header = TRUE, na.strings = "NA")
+  dF = read.table(paste(genfiDir,inFile, sep="/"), header = TRUE, na.strings = "NA")
   
   # select only the desired percentage edge threshold if unweighted metric
   if(!weighted){
@@ -107,7 +106,30 @@ initiateLog <- function(outFile, metricName){
 endLog <- function(outFile){
   write("\\end{document}", file=outFile, append=TRUE)
 }
+set.seed(1)
+SSquadFun <- selfStart(~aq + bq*x + cq*x^2,
+                       function(mCall, data, LHS){
+                         xy <- sortedXyData(mCall[["x"]], LHS, data)
+                         pars <- as.vector(coef(nls(y ~ aq + bq*x + cq*x^2, data=xy)))
+                         setNames(c(pars[3], pars[1], pars[2]),
+                                  mCall[c("aq", "bq", "cq")])
+                         
+                       }, c("aq", "bq", "cq"))
 
+SScubicFun <- selfStart(~ac + bc*x + cc*x^2 + dc*x^3,
+                       function(mCall, data, LHS){
+                         xy <- sortedXyData(mCall[["x"]], LHS, data)
+                         pars <- as.vector(coef(nls(y ~ ac + bc*x + cc*x^2 + dc*x^3, data=xy)))
+                         setNames(c(pars[3], pars[1], pars[2]),
+                                  mCall[c("ac", "bc", "cc", "dc")])
+                         
+                       }, c("ac", "bc", "cc", "dc"))
+
+cubicFun <- function(x, ac,bc,cc,dd){
+  # an attempt at building a quadratic function
+  y = sapply(x, function(x) ac + bc*x + cc*x^2 + dc*x^3)
+  return(y)
+}
 
 #### main functions ####
 wholeBrainAnalysis <- function(metric,
@@ -159,7 +181,7 @@ wholeBrainAnalysis <- function(metric,
   print(xtable(ptSum,
                caption="Subjects included in the analysis"),
         include.rownames=FALSE,
-        file=outFile,
+        # file=outFile,
         append=TRUE)
   
   # stack data and take the mean if it is a node-wise measures
@@ -265,9 +287,10 @@ wholeBrainAnalysis <- function(metric,
 
 graphTimeComparison <- function(metric,
                                metricName,
-                               sp,
-                               startvec=NULL,
-                               weighted=TRUE,
+                               sp, # spike percentage
+                               startvec=NULL, # starting vectors for equation with quadratic term
+                               startvecCub=NULL, # starting vectors for equation with cubic term
+                               weighted=TRUE, # is this a weighted metric?
                                outDir="wholeBrainVsAOOResults",
                                edgePC=3){
   print(metricName)
@@ -297,7 +320,7 @@ graphTimeComparison <- function(metric,
   dF <- stackIt(dF, metric)
   
   # get age of onset data
-  genfiData <- read.table("../genfi_Subjects_sjones_1_22_2015_17_47_47_restructure_summary.csv",
+  genfiData <- read.table("/home/tim/GENFI/genfi_Subjects_sjones_1_22_2015_17_47_47_restructure_summary.csv",
                           sep="\t",
                           header = TRUE)
   
@@ -389,7 +412,7 @@ graphTimeComparison <- function(metric,
                paste(metric,"png",sep="."),
                sep="/"))
   
-  # now run non-linear mixed effects model 
+  # now run non-linear mixed effects model with a quadratic term
   # firstly, plot the values to be able to estimate starting parameters
   if(is.null((startvec))){
 
@@ -397,42 +420,112 @@ graphTimeComparison <- function(metric,
     while(affirm=="n"){
       print(p)
       
-      Asym = as.numeric(readline(prompt="Asymptote of the y-axis: "))
-      R0   = as.numeric(readline(prompt="the value of y when x=0: "))
-      lrc  = as.numeric(readline(prompt="natural log of the rate of decline (guess -1 if not sure): "))
+#       Asym = as.numeric(readline(prompt="Asymptote of the y-axis: "))
+#       R0   = as.numeric(readline(prompt="the value of y when x=0: "))
+#       lrc  = as.numeric(readline(prompt="natural log of the rate of decline (guess -1 if not sure): "))
+      aq = as.numeric(readline(prompt = "Constant term: "))
+      bq = as.numeric(readline(prompt = "x multiplier:" ))
+      cq = as.numeric(readline(prompt = "quadratic multiplier: "))
       
-      dF.temp <- data.frame(x=dF$aoo, y=SSasymp(dF$aoo, Asym, R0, lrc), GS="Start estimates")
+      # dF.temp <- data.frame(x=dF$aoo, y=SSasymp(dF$aoo, Asym, R0, lrc), GS="Start estimates")
+      dF.temp <- data.frame(x=dF$aoo, y=SSquadFun(dF$aoo, aq=aq, bq=bq, cq=cq), GS="Start estimates")
       p.temp <- p + geom_point(data=dF.temp, aes_string(x="x", y="y"))
       print(p.temp)
       affirm = readline(prompt = "Are you happy with this?(y/n)")
     }
-    startvec = c(Asym=Asym, R0=R0, lrc=lrc)
+    # startvec = c(Asym=Asym, R0=R0, lrc=lrc)
+    startvec = c(aq=aq, bq=bq, cq=cq)
   }
+  print(paste("Starting values are as follows.",
+              "Constant:", startvec["aq"],
+              "Multiplier of x term:", startvec["bq"],
+              "Multiplier of quadratic term:", startvec["cq"])
+        )
   
-  # run non-linear model
+  # run non-linear quadratic model
   dF <- dF[dF$GS!="gene negative",]
-  dF <- cbind(dF, data.frame(aooNeg=dF$aoo*-1))  # make age of onset negative so that an asymptotic fit can be achieved.
-  View(dF)
-  
+  # dF <- cbind(dF, data.frame(aooNeg=dF$aoo*-1))  # make age of onset negative so that an asymptotic fit can be achieved.
+
   # The following line calculates the non-linear model
-  # the random elements take in to account the difference in graph measures depending on the scanner sit (Asym|site) and the age at onset between genes (aooNeg|gene)
+  # the random elements take in to account the difference in graph measures depending on the scanner site (Asym|site) and the age at onset between genes (aooNeg|gene)
   # at present the function is an asymptote.
-  nlm <- nlmer(values ~ SSasymp(aooNeg, Asym, R0, lrc) ~ (aooNeg|gene) + (Asym|site), data=dF, start=startvec)
+
+  nlm <- nlmer(values ~ SSquadFun(aoo, aq, bq, cq) ~ (aoo|gene) + (aq|site), data=dF, start = startvec)
   
   print(summary(nlm))
 
   # plot estimated values
-  x = seq(-25,45,by=1)
-  dF.nlm <- data.frame(x=x*-1, y=SSasymp(x, nlm@beta[[1]], nlm@beta[[2]], nlm@beta[[3]]), GS="Estimates")
+  x = seq(-45,25,by=1)
+  dF.nlm <- data.frame(x=x, y=SSquadFun(x, nlm@beta[[1]], nlm@beta[[2]], nlm@beta[[3]]), GS="Estimates")
   p <- ggplot(data=dF.nlm, aes_string(x="x", y="y"))
   p <- p + geom_line()
   p <- p + theme_bw()
-  p <- p + labs(y=metricName, x="Estimated age of onset") + theme(axis.title.x=element_blank())
+  p <- p + labs(y=metricName, x="Estimated time from onset")# + theme(axis.title.x=element_blank())
   
+  print(paste("Saving",paste(outDir,
+                       paste(paste(metric, "nonLinearEstimatesQuadratic",sep="_"),"png",sep="."),
+                       sep="/")))
   ggsave(paste(outDir,
-               paste(paste(metric, "nonLinearEstimates",sep="_"),"png",sep="."),
+               paste(paste(metric, "nonLinearEstimatesQuadratic",sep="_"),"png",sep="."),
                sep="/"))
   
+  # now run non-linear mixed effects model with a cubic term
+  # firstly, plot the values to be able to estimate starting parameters
+  if(is.null((startvecCub))){
+    
+    affirm = "n"
+    while(affirm=="n"){
+      print(p)
+      
+      #       Asym = as.numeric(readline(prompt="Asymptote of the y-axis: "))
+      #       R0   = as.numeric(readline(prompt="the value of y when x=0: "))
+      #       lrc  = as.numeric(readline(prompt="natural log of the rate of decline (guess -1 if not sure): "))
+      ac = nlm@beta[[1]]
+      bc = nlm@beta[[2]]
+      cc = nlm@beta[[3]]
+      dc = as.numeric(readline(prompt = "cubic multiplier: "))
+      
+      # dF.temp <- data.frame(x=dF$aoo, y=SSasymp(dF$aoo, Asym, R0, lrc), GS="Start estimates")
+      dF.temp <- data.frame(x=dF$aoo, y=SScubicFun(dF$aoo, ac=ac, bc=bc, cc=cc, dc=dc), GS="Start estimates")
+      p.temp <- p + geom_point(data=dF.temp, aes_string(x="x", y="y"))
+      print(p.temp)
+      affirm = readline(prompt = "Are you happy with this?(y/n)")
+    }
+    # startvec = c(Asym=Asym, R0=R0, lrc=lrc)
+    startvec = c(ac=ac, bc=bc, cc=cc, dc=dc)
+  }
+  print(paste("Starting values are as follows.",
+              "Constant:", startvec["ac"],
+              "Multiplier of x term:", startvec["bc"],
+              "Multiplier of quadratic term:", startvec["cc"],
+              "Multiplier of cubic term:", startvec["dc"])
+  )
+  
+  # run non-linear quadratic model
+  # The following line calculates the non-linear model
+  # the random elements take in to account the difference in graph measures depending on the scanner site (aq|site) and the age at onset between genes (aooNeg|gene)
+  # this equation includes a cubic term
+  nlm <- nlmer(values ~ SScubicFun(aoo, ac, bc, cc, dc) ~ (aoo|gene) + (ac|site), data=dF, start = startvec)
+
+  # print a summary of the model
+  print(summary(nlm))
+  
+  # plot estimated values
+  x = seq(-45,25,by=1)
+  dF.nlm <- data.frame(x=x, y=SScubicFun(x, nlm@beta[[1]], nlm@beta[[2]], nlm@beta[[3]], nlm@beta[[4]]), GS="Estimates")
+  p <- ggplot(data=dF.nlm, aes_string(x="x", y="y"))
+  p <- p + geom_line()
+  p <- p + theme_bw()
+  p <- p + labs(y=metricName, x="Estimated time from onset")# + theme(axis.title.x=element_blank())
+  
+  print(paste("Saving",paste(outDir,
+                             paste(paste(metric, "nonLinearEstimatesCubic",sep="_"),"png",sep="."),
+                             sep="/")))
+  ggsave(paste(outDir,
+               paste(paste(metric, "nonLinearEstimatesCubic",sep="_"),"png",sep="."),
+               sep="/"))
+  
+  # finalise log file and return dataframe
   endLog(outFile)
   return(dF)
 }
@@ -470,4 +563,7 @@ metrics = list("degree"="connection strength",
 
 # lapply(names(metrics), function(x) wholeBrainAnalysis(x, metrics[[x]], sp, weighted=FALSE))
 # lapply(names(metrics), function(x) graphTimeComparison(x, metrics[[x]], sp, weighted=FALSE))
-dF <- graphTimeComparison("geNorm", "global efficiency (normalised)", sp, startvec=c(Asym=0.9, R0=0.87,lrc=-2.), weighted=FALSE)
+dF <- graphTimeComparison("plNorm", "path length (normalised)", sp, weighted=FALSE)
+
+startVecList = list(geNorm = c(aq=0.88, bq=-.0001, cq=-.00001)
+                    )
