@@ -288,12 +288,14 @@ wholeBrainAnalysis <- function(metric,
 graphTimeComparison <- function(metric,
                                metricName,
                                sp, # spike percentage
+                               cols,
                                startvec=NULL, # starting vectors for equation with quadratic term
-                               startvecCub=NULL, # starting vectors for equation with cubic term
+                               startvecCub=c(dc=0.000000001), # starting vectors for equation with cubic term
                                weighted=TRUE, # is this a weighted metric?
                                outDir="wholeBrainVsAOOResults",
-                               edgePC=3){
-  print(metricName)
+                               edgePC=3,
+                               h=30,w=45,s=4,
+                               sink=TRUE){
   if(weighted){
     metric = paste(metric,"wt",sep="_")
   }
@@ -329,32 +331,30 @@ graphTimeComparison <- function(metric,
   
   # merge age of onset data
   dF <- merge(dF, dF.aoo, by="wbic")
-  dF.plot <- dF
   
   lm.all <- lm(values ~ aoo*GS, data=dF)
 
   print(xtable(summary(lm.all),
                caption=paste("summary of linear model for the interaction between estimated age of onset (aoo) and gene status (GS) on", metricName),
                digits=c(0,2,2,2,2),
-               display=c("s","fg","fg","fg","g")
-  ),
-  include.rownames=TRUE,
-  file=outFile,
-  append=TRUE)
+               display=c("s","fg","fg","fg","g")),
+        include.rownames=TRUE,
+        file=outFile,
+        append=TRUE)
 
   # now run linear mixed effects model model
   # run model
   mod <- lmer(values ~ aoo + GS + (1 | Family) + (1 | site),
               data=dF,
               REML=FALSE)
+  
   print(xtable(summary(mod)[["coefficients"]],
                caption="Linear mixed effects model, fixed effects",
                digits=c(0,2,2,2),
-               display=c("s","fg","fg","fg")
-  ),
-  include.rownames=TRUE,
-  file=outFile,
-  append=TRUE)
+               display=c("s","fg","fg","fg")),
+        include.rownames=TRUE,
+        file=outFile,
+        append=TRUE)
 
   print(xtable(data.frame(StdDev = c(attributes(VarCorr(mod)[[1]])[["stddev"]],
                                      attributes(VarCorr(mod)[[2]])[["stddev"]],
@@ -362,11 +362,10 @@ graphTimeComparison <- function(metric,
                           row.names = c("Family", "Site", "Residual")),                          
                caption="Linear mixed effects model, random effects",
                digits=c(0,2),
-               display=c("s","fg")
-  ),
-  include.rownames=TRUE,
-  file=outFile,
-  append=TRUE)
+               display=c("s","fg")),
+        include.rownames=TRUE,
+        file=outFile,
+        append=TRUE)
 
   # null model
   nulMod <- lmer(values ~ aoo + (1 | Family) + (1 | site),
@@ -379,27 +378,49 @@ graphTimeComparison <- function(metric,
                caption = "ANOVA between model and null model to account for variance explained by the gene status",
                digits = c(0,0,2,2,2,2,2,2,2),
                display = c("s","d","fg","fg","fg","fg","d","fg","fg")),
-  include.rownames=TRUE,
-  file=outFile,
-  append=TRUE)
+        include.rownames=TRUE,
+        file=outFile,
+        append=TRUE)
   
+  # first plot with control gene negative group included
+  dF.plot <- dF
+
   p <- ggplot(dF.plot, aes_string(x="aoo", y="values", colour="GS", group="GS"))
   p <- p + geom_point()
-  p <- p + geom_smooth(method="lm")
-  p <- p + theme_bw()
-  p <- p + labs(y=metricName, x="Estimated age of onset") + theme(axis.title.x=element_blank())
-
+  pp <- p + geom_smooth(method="lm")
+  colList = unlist(cols[levels(dF.plot$GS)])
+  pp <- pp + scale_colour_manual(values=as.vector(colList))
+  pp <- pp + labs(y=metricName, x="Estimated age of onset") + theme(axis.title.x=element_blank(), legend.key=element_rect(fill="white", colour="white"))
+  pp <- pp + theme_bw() + theme(legend.key = element_rect(colour="#FFFFFF", fill = "#FFFFFF"))
+  
   ggsave(paste(outDir,
                paste(metric,"png",sep="."),
-               sep="/"))
+               sep="/"),
+         scale=s,
+         dpi=600,
+         height=h, width=w,
+         units="mm")
+  
+  
+  # now exclude the gene negative group and do the plot again
+  dF <- dF[dF$GS!="gene negative",]
+  dF.plot <- dF
+  p <- ggplot(dF.plot, aes_string(x="aoo", y="values", colour="GS", group="GS"))
+  p <- p + geom_point()
   
   # now run non-linear mixed effects model with a quadratic term
+  nlOutFile = paste(outDir,
+                    paste(metric,"NLlogFile.txt",sep="_"),
+                    sep="/")
+  if(sink){
+    sink(nlOutFile)
+  }
   # firstly, plot the values to be able to estimate starting parameters
   if(is.null((startvec))){
 
     affirm = "n"
     while(affirm=="n"){
-      print(p)
+      print(pp)
       
 #       Asym = as.numeric(readline(prompt="Asymptote of the y-axis: "))
 #       R0   = as.numeric(readline(prompt="the value of y when x=0: "))
@@ -410,21 +431,21 @@ graphTimeComparison <- function(metric,
       
       # dF.temp <- data.frame(x=dF$aoo, y=SSasymp(dF$aoo, Asym, R0, lrc), GS="Start estimates")
       dF.temp <- data.frame(x=dF$aoo, y=SSquadFun(dF$aoo, aq=aq, bq=bq, cq=cq), GS="Start estimates")
-      p.temp <- p + geom_point(data=dF.temp, aes_string(x="x", y="y"))
+      p.temp <- pp + geom_point(data=dF.temp, aes_string(x="x", y="y"))
       print(p.temp)
       affirm = readline(prompt = "Are you happy with this?(y/n)")
     }
     # startvec = c(Asym=Asym, R0=R0, lrc=lrc)
     startvec = c(aq=aq, bq=bq, cq=cq)
   }
-  print(paste("Starting values are as follows.",
-              "Constant:", startvec["aq"],
-              "Multiplier of x term:", startvec["bq"],
-              "Multiplier of quadratic term:", startvec["cq"])
+  lapply(list("Starting values are as follows.",
+              paste("Constant:", startvec["aq"])),
+              paste("Multiplier of x term:", startvec["bq"]),
+              paste("Multiplier of quadratic term:", startvec["cq"]),
+         function(x) print(x)
         )
   
   # run non-linear quadratic model
-  dF <- dF[dF$GS!="gene negative",]
   # dF <- cbind(dF, data.frame(aooNeg=dF$aoo*-1))  # make age of onset negative so that an asymptotic fit can be achieved.
 
   # The following line calculates the non-linear model
@@ -437,18 +458,26 @@ graphTimeComparison <- function(metric,
 
   # plot estimated values
   x = seq(-45,25,by=1)
-  dF.nlmq <- data.frame(x=x, y=SSquadFun(x, nlmq@beta[[1]], nlmq@beta[[2]], nlmq@beta[[3]]), GS="Estimates")
-  pq <- ggplot(data=dF.nlmq, aes_string(x="x", y="y"))
-  pq <- pq + geom_line()
-  pq <- pq + theme_bw()
+  dF.nlmq <- data.frame(x=x, y=SSquadFun(x, nlmq@beta[[1]], nlmq@beta[[2]], nlmq@beta[[3]]), GS="estimates")
+  
+  pq <- p + geom_line(data=dF.nlmq, aes_string(x="x", y="y"))
+  cList = c("affected", "estimates", "gene positive")
+  colList = unlist(cols[cList])
+  pq <- pq + scale_colour_manual(values=as.vector(colList),
+                                 breaks=c("gene positive", "affected", "estimates"))
+  pq <- pq + theme_bw() + theme(legend.key=element_rect(fill="white", colour="white"))
   pq <- pq + labs(y=metricName, x="Estimated time from onset")# + theme(axis.title.x=element_blank())
   
-  print(paste("Saving",paste(outDir,
-                       paste(paste(metric, "nonLinearEstimatesQuadratic",sep="_"),"png",sep="."),
-                       sep="/")))
+#   print(paste("Saving",paste(outDir,
+#                        paste(paste(metric, "nonLinearEstimatesQuadratic",sep="_"),"png",sep="."),
+#                        sep="/")))
   ggsave(paste(outDir,
                paste(paste(metric, "nonLinearEstimatesQuadratic",sep="_"),"png",sep="."),
-               sep="/"))
+               sep="/"),
+         scale=s,
+         dpi=600,
+         height=h, width=w,
+         units="mm")
   
   # now run non-linear mixed effects model with a cubic term
   # firstly, plot the values to be able to estimate starting parameters
@@ -457,26 +486,31 @@ graphTimeComparison <- function(metric,
   cc = nlmq@beta[[3]]
   
   if(is.null((startvecCub))){
-    
     affirm = "n"
     while(affirm=="n"){
-      print(p)
+      print(pp)
       dc = as.numeric(readline(prompt = "cubic multiplier: "))
       
       # dF.temp <- data.frame(x=dF$aoo, y=SSasymp(dF$aoo, Asym, R0, lrc), GS="Start estimates")
       dF.temp <- data.frame(x=dF$aoo, y=SScubicFun(dF$aoo, ac=ac, bc=bc, cc=cc, dc=dc), GS="Start estimates")
-      p.temp <- p + geom_point(data=dF.temp, aes_string(x="x", y="y"))
+      p.temp <- pp + geom_point(data=dF.temp, aes_string(x="x", y="y"))
       print(p.temp)
       affirm = readline(prompt = "Are you happy with this?(y/n)")
     }
     # startvec = c(Asym=Asym, R0=R0, lrc=lrc)
-    startvec = c(ac=ac, bc=bc, cc=cc, dc=dc)
+  } else {
+    dc=startvecCub[["dc"]]
+    print(dc)
   }
-  print(paste("Starting values are as follows.",
-              "Constant:", startvec["ac"],
-              "Multiplier of x term:", startvec["bc"],
-              "Multiplier of quadratic term:", startvec["cc"],
-              "Multiplier of cubic term:", startvec["dc"])
+  
+  startvec = c(ac=ac, bc=bc, cc=cc, dc=dc)
+  
+  lapply(list("Starting values are as follows.",
+              paste("Constant:", startvec["ac"]),
+              paste("Multiplier of x term:", startvec["bc"]),
+              paste("Multiplier of quadratic term:", startvec["cc"]),
+              paste("Multiplier of cubic term:", startvec["dc"])),
+         function(x) print(x)
   )
   
   # run non-linear quadratic model
@@ -490,32 +524,52 @@ graphTimeComparison <- function(metric,
   
   # plot estimated values
   x = seq(-45,25,by=1)
-  dF.nlmc <- data.frame(x=x, y=SScubicFun(x, nlmc@beta[[1]], nlmc@beta[[2]], nlmc@beta[[3]], nlmc@beta[[4]]), GS="Estimates")
-  pc <- ggplot(data=dF.nlmc, aes_string(x="x", y="y"))
-  pc <- pc + geom_line()
-  pc <- pc + theme_bw()
+  dF.nlmc <- data.frame(x=x,
+                        y=SScubicFun(x, nlmc@beta[[1]], nlmc@beta[[2]], nlmc@beta[[3]], nlmc@beta[[4]]),
+                        GS="estimates")
+  
+  # pc <- ggplot()
+  pc <- p + geom_line(data=dF.nlmc, aes_string(x="x", y="y"))
+  pc <- pc + scale_colour_manual(values=as.vector(colList),
+                                 breaks=c("gene positive", "affected", "estimates"))
+  pc <- pc + theme_bw() + theme(legend.key=element_rect(fill="white", colour="white"))
   pc <- pc + labs(y=metricName, x="Estimated time from onset")# + theme(axis.title.x=element_blank())
   
-  print(paste("Saving",paste(outDir,
-                             paste(paste(metric, "nonLinearEstimatesCubic",sep="_"),"png",sep="."),
-                             sep="/")))
+#   print(paste("Saving",paste(outDir,
+#                              paste(paste(metric, "nonLinearEstimatesCubic",sep="_"),"png",sep="."),
+#                              sep="/")))
   ggsave(paste(outDir,
                paste(paste(metric, "nonLinearEstimatesCubic",sep="_"),"png",sep="."),
-               sep="/"))
+               sep="/"),
+         scale=s,
+         dpi=600,
+         height=h, width=w,
+         units="mm")
+  
+  if(sink){
+    sink()
+  }
   
   # now compare the quadratic and cubic equations
-  qvsc.anova <- anova(nlmq, nlmc)
-  print(xtable(qvsc.anova,
-               caption = "ANOVA between models with quadratic and cubic terms to explain rate of change in graph measure with time",
-               digits = c(0,0,2,2,2,2,2,2,2),
-               display = c("s","d","fg","fg","fg","fg","d","fg","fg")),
-        include.rownames=TRUE,
-        file=outFile,
-        append=TRUE)
+  qvsc.anova = NULL
+  try(
+    qvsc.anova <- anova(nlmq, nlmc)
+    
+  )
+  
+  if(!is.na(qvsc.anova)){
+    print(xtable(qvsc.anova,
+                 caption = "ANOVA between models with quadratic and cubic terms to explain rate of change in graph measure with time",
+                 digits = c(0,0,2,2,2,2,2,2,2),
+                 display = c("s","d","fg","fg","fg","fg","d","fg","fg")),
+          include.rownames=TRUE,
+          file=outFile,
+          append=TRUE)
+  }
   
   # finalise log file and return dataframe
   endLog(outFile)
-  return(dF)
+  return(list(pp=pp, pq=pq, pc=pc))
 }
 
 
@@ -550,8 +604,43 @@ metrics = list("degree"="connection strength",
                "closeCentNorm"="closeness centrality (normalised)")
 
 # lapply(names(metrics), function(x) wholeBrainAnalysis(x, metrics[[x]], sp, weighted=FALSE))
-# lapply(names(metrics), function(x) graphTimeComparison(x, metrics[[x]], sp, weighted=FALSE))
-dF <- graphTimeComparison("plNorm", "path length (normalised)", sp, weighted=FALSE)
 
-startVecList = list(geNorm = c(aq=0.88, bq=-.0001, cq=-.00001)
-                    )
+
+startVecListQ = list(degree        = c(aq = 29.8,   bq = 0.000001, cq = 0.000001),
+                     degreeNorm    = c(aq = 1.03,   bq = 0.000001, cq = 0.000001),
+                     ge            = c(aq = 0.44,   bq = 0.000001, cq = 0.000001),
+                     geNorm        = c(aq = 0.89,   bq = 0.000001, cq = 0.000001),
+                     le            = c(aq = 20.5,   bq = 0.000001, cq = 0.000001),
+                     leNorm        = c(aq = 1.30,   bq = 0.000001, cq = 0.000001),
+                     pl            = c(aq = 2.50,   bq = 0.000001, cq = 0.000001),
+                     plNorm        = c(aq = 1.18,   bq = 0.000001, cq = 0.000001),
+                     eigCentNP     = c(aq = 0.037,  bq = 0.000001, cq = 0.000001),
+                     eigCentNorm   = c(aq = 0.85,   bq = 0.000001, cq = 0.000001),
+                     betCent       = c(aq = 0.0031, bq = 0.000001, cq = 0.000001),
+                     betCentNorm   = c(aq = 1.30,   bq = 0.000001, cq = 0.000001),
+                     closeCent     = c(aq = 0.40,   bq = 0.000001, cq = 0.000001),
+                     closeCentNorm = c(aq = 0.85,   bq = 0.000001, cq = 0.000001)
+                     )
+
+cols <- list("gene negative"="#E69F00",
+             "gene positive"="#56B4E9",
+             "affected"="#D55E00",
+             "estimates"="#000000"
+             )
+
+# startVecListC= list(geNorm = c(dc=0.0001),
+#                     plNorm = c(dc=0.001))
+# 
+# dF <- graphTimeComparison("plNorm", "path length (normalised)",
+#                           startvec=startVecListQ[["plNorm"]],
+#                           startvecCub = startVecListC[["plNorm"]],
+#                           sp,
+#                           cols=cols,
+#                           weighted=FALSE,
+#                           sink=FALSE)
+
+# lapply(names(metrics), function(x) graphTimeComparison(x,
+#                                                        metrics[[x]],
+#                                                        sp, weighted=FALSE,
+#                                                        cols=cols,
+#                                                        startvec = startVecListQ[[x]]))
