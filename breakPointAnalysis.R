@@ -1,4 +1,5 @@
 library(bfast)
+source("wholeBrainMetrics.R")
 
 smoothData <- function(GS, dF, bw=10){
   if(!is.null(GS)){
@@ -44,3 +45,13 @@ dF.sm <- rbind(dF.sm, smoothData(NULL, dF))
 p <- ggplot(dF.sm, aes_string(x="x", y="values", colour="GS"))
 p <- p + geom_line(aes_string(linetype="type"))
 p <- p + geom_point(data=dF, aes_string(x="aoo", y="geNorm"), linetype="solid")
+
+
+# new method of analysis
+# create model
+mod <- lm(geNorm~aoo, data=dF)
+# do segmentation analysis assuming the breakpoint is at 0
+my.seg <- segmented(mod, seg.Z = ~aoo, psi = c(0))
+# print summary
+summary(my.seg)
+

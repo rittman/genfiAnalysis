@@ -8,6 +8,7 @@ library(xtable)
 library(car)
 library(xlsx)
 library(lme4)
+library(segmented)
 
 genfiDir = "/home/tim/GENFI/GENFI_camgrid_20150525/"
 
@@ -191,7 +192,7 @@ wholeBrainAnalysis <- function(metric,
                                metricName,
                                cols,
                                sp, weighted=TRUE,
-                               outDir="wholeBrainResults",
+                               outDir="wholebrainResults",
                                edgePC=3, ts=12){
   
   if(weighted){
@@ -238,6 +239,8 @@ wholeBrainAnalysis <- function(metric,
         # file=outFile,
         append=TRUE)
   
+  
+  
   # stack data and take the mean if it is a node-wise measures
   dF.wb <- stackIt(dF, metric)
   
@@ -257,6 +260,8 @@ wholeBrainAnalysis <- function(metric,
         file=outFile,
         append=TRUE)
     
+  
+
   # ANOVA of the differences
   mod <- lm(values~GS*gene, data=dF.wb)
   mod.aov <- anova(mod)
@@ -267,20 +272,50 @@ wholeBrainAnalysis <- function(metric,
         file=outFile,
         append=TRUE)
   
+  
+  print(xtable(mod.aov,
+               digits = c(0,0,2,2,1,2),
+               display = c("s","d", "fg", "fg", "f", "fg")),
+        include.rownames=TRUE,
+        append=TRUE)
+  
+  
   #### post hoc t-tests ####
   # group pairwise
   pwGS <- combn(levels(dF.wb$GS),2)
   pwTtests <- apply(pwGS, 2, function(x) dotTests(x,dF.wb))
   pwTtests <- data.frame(matrix(unlist(pwTtests), nrow = length(pwTtests), byrow = TRUE))
   names(pwTtests) <- c("comparison", "t", "p")
+  pwTtests[,2] <- as.numeric(as.character(pwTtests[,2]))
+  pwTtests[,3] <- as.numeric(as.character(pwTtests[,3]))
+
   print(xtable(pwTtests,
                caption="Pairwise post-hoc t-test results"),
         include.rownames=FALSE,
         file=outFile,
         append=TRUE)
   
+  print(xtable(pwTtests,
+               caption="Pairwise post-hoc t-test results"),
+        include.rownames=FALSE,
+        append=TRUE)
+  
+  
   # t-test for affected vs non-affected (gene negative and gene positive)
   anTtest <- t.test(dF.wb[dF.wb$GS=="affected","values"], dF.wb[dF.wb$GS!="affected","values"])
+  
+  print(xtable(data.frame("t"=as.numeric(as.character(fn(anTtest[["statistic"]]))),
+                          "p"=as.numeric(as.character(fn(anTtest[["p.value"]])))),
+               caption="t-test between affected subjects and non-affected (both gene negative and gene positive unaffected)",
+               digits=c(0,2,2),
+               display=c("s","fg","fg")
+               ),
+        include.rownames=FALSE,
+        file=outFile,
+        append=TRUE)
+  
+  
+  
   print(xtable(data.frame("t"=fn(anTtest[["statistic"]]),
                           "p"=fn(anTtest[["p.value"]])),
                caption="t-test between affected subjects and non-affected (both gene negative and gene positive unaffected",
@@ -288,7 +323,6 @@ wholeBrainAnalysis <- function(metric,
                display=c("s","fg","fg")
                ),
         include.rownames=FALSE,
-        file=outFile,
         append=TRUE)
         
   # now do a plot for group differences, collapsed across genes
@@ -351,6 +385,24 @@ wholeBrainAnalysis <- function(metric,
                          pwTtests)
   }
   
+  dF.tResults[,3] <- as.numeric(as.character(dF.tResults[,3]))
+  dF.tResults[,4] <- as.numeric(as.character(dF.tResults[,4]))
+  
+  print(xtable(dF.tResults,
+               caption="t-test between diagnostic groups within each gene",
+               digits=c(0,0,0,2,2),
+               display=c("s","s","s","fg","fg")),
+        include.rownames=FALSE,
+        file=outFile,
+        append=TRUE)
+  
+  print(xtable(dF.tResults,
+               caption="t-test between diagnostic groups within each gene",
+               digits=c(0,0,0,2,2),
+               display=c("s","s","s","fg","fg")),
+        include.rownames=FALSE,
+        append=TRUE)
+  
   # now do a plot for group differences for separate genes
   # p <- ggplot(dF.stacked.plot, aes_string(x="unique", y="valuesMean", middle="valuesMean", group="unique", fill="gene", upper="upper", lower="lower"))
   pg <- ggplot(dF.wb, aes_string(x="gene", y="values", fill="GS"))
@@ -384,24 +436,132 @@ wholeBrainAnalysis <- function(metric,
   ggsave(paste(outDir,
                paste(metric,"byGene.png",sep="_"),
                sep="/"))
-  
   endLog(outFile)
   
   return(list(p,pg))
 }
 
+wholeBrainAnalysisMixedEffects <- function(metric,
+                                           metricName,
+                                           cols,
+                                           sp, weighted=TRUE,
+                                           outDir="wholebrainResults",
+                                           edgePC=3, ts=12,
+                                           exclNeg=FALSE){
+  
+  if(weighted){
+    metric = paste(metric,"wt",sep="_")
+  }
+  
+  # create output directory
+  dir.create(outDir, showWarnings = FALSE)
+  
+  # define log output file
+  outFile = paste(outDir,
+                  paste(metric,"logFile.tex",sep="_"),
+                  sep="/")
+  
+  # import graph data
+  dF <- importGraphData(metric, weighted, edgePC)
+  
+  # if indicated exclude gene negative group
+  if(exclNeg){
+    dF <- dF[dF$GS!="gene negative",]
+  }
+  
+  # apply spike percentage threshold
+  dF <- applySP(dF, sp)
+  
+  colList = unlist(cols[levels(dF$GS)])
+  
+  # stack data and take the mean if it is a node-wise measures
+  dF.wb <- stackIt(dF, metric)
+
+  # ANOVA of the differences
+  mod <- lmer(values ~ GS + (1 | gene) + (1 | site),
+              data=dF.wb,
+              REML=FALSE)
+  
+  # print random effects of the model
+  mod.coef <- ranef(mod)
+  
+  print(xtable(mod.coef$site,
+               digits=c(0,2),
+               display=c("s", "fg"),
+               caption = "Linear mixed effects model, site coefficients"),
+        file=outFile,
+        append=TRUE)
+  
+  print(xtable(mod.coef$gene,
+               digits=c(0,2),
+               display=c("s", "fg"),
+               caption = "Linear mixed effects model, gene coefficients"),
+        file=outFile,
+        append=TRUE)
+
+  print(xtable(mod.coef$site,
+                 digits=c(0,2),
+                 display=c("s", "fg"),
+               caption = "Linear mixed effects model, site coefficients"))
+  
+  
+  print(xtable(mod.coef$gene,
+               digits=c(0,2),
+               display=c("s", "fg"),
+               caption = "Linear mixed effects model, gene coefficients"))
+  
+  
+  # print variances
+  vc <- VarCorr(mod)
+
+  print(xtable(data.frame(vc),
+               display=c("s","s","s","s","g","fg"),
+               digits=c(0,0,0,0,2,2),
+               caption="Variance of random effects"),
+        include.rownames=FALSE)
+
+  print(xtable(data.frame(vc),
+               display=c("s","s","s","s","g","fg"),
+               digits=c(0,0,0,0,2,2),
+               caption="Variance of random effects"),
+        file=outFile,
+        append=TRUE,
+        include.rownames=FALSE)
+  
+  
+
+  # Type II ANOVA
+  mod.avo <- Anova(mod, type="II")
+  
+  print(xtable(mod.avo,
+               digits=c(0,1,1,2),
+               display=c("s","f","d","fg"),
+               caption=paste("ANOVA of linear mixed effects model for", metricName))
+        )
+  
+  print(xtable(mod.avo,
+               digits=c(0,1,1,2),
+               display=c("s","f","d","fg"),
+               caption=paste("ANOVA of linear mixed effects model for", metricName)),
+        file=outFile,
+        append=TRUE
+  )
+  
+  
+  return(mod)
+}
 
 graphTimeComparison <- function(metric,
-                               metricName,
-                               sp, # spike percentage
-                               cols,
-                               startvec=NULL, # starting vectors for equation with quadratic term
-                               startvecCub=c(dc=0.000000001), # starting vectors for equation with cubic term
-                               weighted=TRUE, # is this a weighted metric?
-                               outDir="wholeBrainVsAOOResults",
-                               edgePC=3,
-                               h=30,w=45,s=4,ts=12,ps=4,
-                               sink=TRUE){
+                                metricName,
+                                sp, # spike percentage
+                                cols,
+                                startvec=NULL, # starting vectors for equation with quadratic term
+                                startvecCub=c(dc=0.000000001), # starting vectors for equation with cubic term
+                                weighted=TRUE, # is this a weighted metric?
+                                outDir="wholebrainVsAOOResults",
+                                edgePC=3,
+                                h=30,w=45,s=4,ts=12,ps=4,
+                                sink=TRUE){
   if(weighted){
     metric = paste(metric,"wt",sep="_")
   }
@@ -447,10 +607,17 @@ graphTimeComparison <- function(metric,
         include.rownames=TRUE,
         file=outFile,
         append=TRUE)
+  
+  print(xtable(summary(lm.all),
+               caption=paste("summary of linear model for the interaction between estimated age of onset (aoo) and gene status (GS) on", metricName),
+               digits=c(0,2,2,2,2),
+               display=c("s","fg","fg","fg","g")),
+        include.rownames=TRUE,
+        append=TRUE)
 
   # now run linear mixed effects model model
   # run model
-  mod <- lmer(values ~ aoo + GS + (1 | Family) + (1 | site),
+  mod <- lmer(values ~ GS * aoo + (1 | Family) + (1 | site),
               data=dF,
               REML=FALSE)
   
@@ -460,6 +627,13 @@ graphTimeComparison <- function(metric,
                display=c("s","fg","fg","fg")),
         include.rownames=TRUE,
         file=outFile,
+        append=TRUE)
+  
+  print(xtable(summary(mod)[["coefficients"]],
+               caption="Linear mixed effects model, fixed effects",
+               digits=c(0,2,2,2),
+               display=c("s","fg","fg","fg")),
+        include.rownames=TRUE,
         append=TRUE)
 
   print(xtable(data.frame(StdDev = c(attributes(VarCorr(mod)[[1]])[["stddev"]],
@@ -471,6 +645,16 @@ graphTimeComparison <- function(metric,
                display=c("s","fg")),
         include.rownames=TRUE,
         file=outFile,
+        append=TRUE)
+  
+  print(xtable(data.frame(StdDev = c(attributes(VarCorr(mod)[[1]])[["stddev"]],
+                                     attributes(VarCorr(mod)[[2]])[["stddev"]],
+                                     attributes(VarCorr(mod))[["sc"]]),
+                          row.names = c("Family", "Site", "Residual")),                          
+               caption="Linear mixed effects model, random effects",
+               digits=c(0,2),
+               display=c("s","fg")),
+        include.rownames=TRUE,
         append=TRUE)
 
   # null model
@@ -488,6 +672,13 @@ graphTimeComparison <- function(metric,
         file=outFile,
         append=TRUE)
   
+  print(xtable(modComparison,
+               caption = "ANOVA between model and null model to account for variance explained by the gene status",
+               digits = c(0,0,2,2,2,2,2,2,2),
+               display = c("s","d","fg","fg","fg","fg","d","fg","fg")),
+        include.rownames=TRUE,
+        append=TRUE)
+  
   # first plot with control gene negative group included
   dF.plot <- dF
 
@@ -499,7 +690,7 @@ graphTimeComparison <- function(metric,
   pp <- pp + labs(title=paste(metricName, "linear regression", sep="\n"), y=metricName, x="Estimated age of onset") + theme(axis.title.x=element_blank(), legend.key=element_rect(fill="white", colour="white"))
   pp <- pp + theme_bw() + theme(legend.key = element_rect(colour="#FFFFFF", fill = "#FFFFFF"))
   pp <- pp + theme(text=element_text(size=ts), plot.title=element_text(size=ts))
-  
+
   ggsave(paste(outDir,
                paste(metric,"png",sep="."),
                sep="/"),
@@ -509,11 +700,77 @@ graphTimeComparison <- function(metric,
          units="mm")
   
   
-  # now exclude the gene negative group and do the plot again
+  # now exclude the gene negative group and do the regression and plot again
   dF <- dF[dF$GS!="gene negative",]
+  
+  # now run linear mixed effects model model
+  # run model
+  mod <- lmer(values ~ GS * aoo + (1 | Family) + (1 | site),
+              data=dF,
+              REML=FALSE)
+  
+  print(xtable(summary(mod)[["coefficients"]],
+               caption="Linear mixed effects model, fixed effects",
+               digits=c(0,2,2,2),
+               display=c("s","fg","fg","fg")),
+        include.rownames=TRUE,
+        file=outFile,
+        append=TRUE)
+  
+  print(xtable(summary(mod)[["coefficients"]],
+               caption="Linear mixed effects model, fixed effects",
+               digits=c(0,2,2,2),
+               display=c("s","fg","fg","fg")),
+        include.rownames=TRUE,
+        append=TRUE)
+  
+  print(xtable(data.frame(StdDev = c(attributes(VarCorr(mod)[[1]])[["stddev"]],
+                                     attributes(VarCorr(mod)[[2]])[["stddev"]],
+                                     attributes(VarCorr(mod))[["sc"]]),
+                          row.names = c("Family", "Site", "Residual")),                          
+               caption="Linear mixed effects model, random effects",
+               digits=c(0,2),
+               display=c("s","fg")),
+        include.rownames=TRUE,
+        file=outFile,
+        append=TRUE)
+  
+  print(xtable(data.frame(StdDev = c(attributes(VarCorr(mod)[[1]])[["stddev"]],
+                                     attributes(VarCorr(mod)[[2]])[["stddev"]],
+                                     attributes(VarCorr(mod))[["sc"]]),
+                          row.names = c("Family", "Site", "Residual")),                          
+               caption="Linear mixed effects model, random effects",
+               digits=c(0,2),
+               display=c("s","fg")),
+        include.rownames=TRUE,
+        append=TRUE)
+  
+  # null model
+  nulMod <- lmer(values ~ aoo + (1 | Family) + (1 | site),
+                 data=dF,
+                 REML=FALSE)
+  
+  modComparison <- anova(mod,nulMod)
+  
+  print(xtable(modComparison,
+               caption = "ANOVA between model and null model to account for variance explained by the gene status",
+               digits = c(0,0,2,2,2,2,2,2,2),
+               display = c("s","d","fg","fg","fg","fg","d","fg","fg")),
+        include.rownames=TRUE,
+        file=outFile,
+        append=TRUE)
+  
+  print(xtable(modComparison,
+               caption = "ANOVA between model and null model to account for variance explained by the gene status",
+               digits = c(0,0,2,2,2,2,2,2,2),
+               display = c("s","d","fg","fg","fg","fg","d","fg","fg")),
+        include.rownames=TRUE,
+        append=TRUE)
+  
   dF.plot <- dF
   p <- ggplot(dF.plot, aes_string(x="aoo", y="values", colour="GS", group="GS"))
   p <- p + geom_point(size=ps)
+  plot(p)
   
   # now run non-linear mixed effects model with a quadratic term
   nlOutFile = paste(outDir,
@@ -704,7 +961,7 @@ graphTimeComparison <- function(metric,
 #                "betCent"="betweenness centrality",
 #                "closeCent"="closeness centrality")
 
-# lapply(names(metrics), function(x) wholeBrainAnalysis(x, metrics[[x]], sp))
+# lapply(names(metrics), function(x) wholebrainAnalysis(x, metrics[[x]], sp))
 # lapply(names(metrics), function(x) graphTimeComparison(x, metrics[[x]], sp))
 
 # do metrics for unweighted graphs
@@ -723,7 +980,7 @@ graphTimeComparison <- function(metric,
 #                "closeCent"="closeness centrality",
 #                "closeCentNorm"="closeness centrality (normalised)")
 
-# lapply(names(metrics), function(x) wholeBrainAnalysis(x, metrics[[x]], sp, weighted=FALSE))
+# lapply(names(metrics), function(x) wholebrainAnalysis(x, metrics[[x]], sp, weighted=FALSE))
 
 
 startVecListQ = list(degree        = c(aq = 29.8,   bq = 0.000001, cq = 0.000001),
@@ -764,3 +1021,89 @@ cols <- list("gene negative"="#E69F00",
 #                                                        sp, weighted=FALSE,
 #                                                        cols=cols,
 #                                                        startvec = startVecListQ[[x]]))
+
+breakpoint <- function(metric,
+                       metricName,
+                       sp, # spike percentage
+                       cols,
+                       edgePC=3,
+                       outDir="wholebrainVsAOOResults",
+                       weighted=FALSE,
+                       ts=12){
+  if(weighted){
+    metric = paste(metric,"wt",sep="_")
+  }
+  
+  # create output directory
+  dir.create(outDir, showWarnings = FALSE)
+  
+  # define log output file
+  outFile = paste(outDir,
+                  paste(metric,"logFile.tex",sep="_"),
+                  sep="/")
+  
+  # create log file
+  initiateLog(outFile, metricName)
+  
+  ### function to plot and analyse the relationship between graph metrics and expected time to disease onset
+  # import graph metric data
+  dF <- importGraphData(metric, weighted, edgePC)
+  
+  # filter out gene negative subjects
+  dF <- dF[dF$GS!="gene negative",]
+  
+  # filter by spike percentage
+  dF <- applySP(dF, sp)
+  
+  # stack the data and take mean if a nodewise measure
+  dF <- stackIt(dF, metric) # changes the name of the metric to 'values'
+  
+  # get age of onset data
+  genfiData <- read.table("/home/tim/GENFI/genfi_Subjects_sjones_1_22_2015_17_47_47_restructure_summary.csv",
+                          sep="\t",
+                          header = TRUE)
+  
+  dF.aoo <- data.frame(wbic=genfiData$Subject,
+                       aoo=genfiData$Yrs.from.AV_AAO)
+  
+  # merge age of onset data
+  dF <- merge(dF, dF.aoo, by="wbic")
+
+#   # filter out affected subjects less than t=0 and gene positive greater than t=0
+#   dF <- rbind(dF[dF$GS=="affected" && dF$aoo>=0,],
+#               dF[dF$GS=="gene positive" && dF$aoo<=0,])
+  
+  # create model
+  mod <- lm(values ~ aoo, data=dF)
+
+  # do segmentation analysis assuming the breakpoint is at 0
+  br <- segmented(mod, seg.Z = ~aoo, psi = c(aoo=0.))
+
+  # get summary
+  br.summary <- summary(br)
+  
+  # plot breakpoint data
+  y = br$psi[[2]] * br$coefficients[[2]] + br$coefficients[[1]] # get the y value of the breakpoint
+  print(y)
+  p <- ggplot(dF, aes_string(x="aoo", y="values", colour="GS"))
+  p <- p + geom_point()
+  p <- p + geom_segment(x=min(dF$aoo),
+                        xend=br$psi[[2]],
+                        y=min(dF$aoo)*br$coefficients[[2]]+br$coefficients[[1]],
+                        yend=y,
+                        colour="black")
+  
+  p <- p + geom_segment(x=br$psi[[2]],
+                        xend=max(dF$aoo),
+                        y=y,
+                        yend=max(dF$aoo)*br$coefficients[[3]]+br$coefficients[[1]],
+                        colour="black")
+  
+  colList = unlist(cols[levels(dF$GS)])
+  p <- p + scale_colour_manual(name="Group",values=as.vector(colList))
+  p <- p + labs(title=paste(metricName, "breakpoint analysis", sep="\n"), y=metricName, x="Estimated age of onset") + theme(axis.title.x=element_blank(), legend.key=element_rect(fill="white", colour="white"))
+  p <- p + theme_bw() + theme(legend.key = element_rect(colour="#FFFFFF", fill = "#FFFFFF"))
+  p <- p + theme(text=element_text(size=ts), plot.title=element_text(size=ts))
+  
+  return(list(br, p))
+}
