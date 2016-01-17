@@ -478,7 +478,7 @@ wholeBrainAnalysisMixedEffects <- function(metric,
   dF.wb <- stackIt(dF, metric)
 
   # ANOVA of the differences
-  mod <- lmer(values ~ GS + (1 | gene) + (1 | site),
+  mod <- lmer(values ~ GS + (1 | gene) + (1 | site) + (1 | Family),
               data=dF.wb,
               REML=FALSE)
   
@@ -555,6 +555,192 @@ graphTimeComparison <- function(metric,
                                 metricName,
                                 sp, # spike percentage
                                 cols,
+                                weighted=TRUE, # is this a weighted metric?
+                                outDir="wholebrainVsAOOResults",
+                                edgePC=3,
+                                h=30,w=45,s=4,ts=12,ps=4,
+                                exclNeg=TRUE){
+  if(weighted){
+    metric = paste(metric,"wt",sep="_")
+  }
+  
+  # create output directory
+  dir.create(outDir, showWarnings = FALSE)
+  
+  # define log output file
+  outFile = paste(outDir,
+                  paste(metric,"logFile.tex",sep="_"),
+                  sep="/")
+  
+  # create log file
+  initiateLog(outFile, metricName)
+  
+  ### function to plot and analyse the relationship between graph metrics and expected time to disease onset
+  # import graph metric data
+  dF <- importGraphData(metric, weighted, edgePC)
+  
+  # filter by spike percentage
+  dF <- applySP(dF, sp)
+  
+  # stack the data and take mean if a nodewise measure
+  dF <- stackIt(dF, metric)
+  
+  # get age of onset data
+  genfiData <- read.table("/home/tim/GENFI/genfi_Subjects_sjones_1_22_2015_17_47_47_restructure_summary.csv",
+                          sep="\t",
+                          header = TRUE)
+  
+  dF.aoo <- data.frame(wbic=genfiData$Subject,
+                       aoo=genfiData$Yrs.from.AV_AAO)
+  
+  # merge age of onset data
+  dF <- merge(dF, dF.aoo, by="wbic")
+  
+  # if indicated exclude gene negative group
+  plotOutName = paste(metric,"png",sep=".")
+  
+  if(exclNeg){
+    dF <- dF[dF$GS!="gene negative",]
+    plotOutName = paste(paste(metric, "GenePos", sep=""),"png",sep=".")
+  }
+
+  lm.all <- lm(values ~ aoo*GS, data=dF)
+
+  # plot linear model NOT MIXED EFFECTS
+  dF.plot <- dF
+  
+  p <- ggplot(dF.plot, aes_string(x="aoo", y="values", colour="GS", group="GS"))
+  p <- p + geom_point(size=ps)
+  pp <- p + geom_smooth(method="lm")
+  colList = unlist(cols[levels(dF.plot$GS)])
+  pp <- pp + scale_colour_manual(name="Group",values=as.vector(colList))
+  pp <- pp + labs(title=paste(metricName, "linear regression", sep="\n"), y=metricName, x="Estimated age of onset") + theme(axis.title.x=element_blank(), legend.key=element_rect(fill="white", colour="white"))
+  pp <- pp + theme_bw() + theme(legend.key = element_rect(colour="#FFFFFF", fill = "#FFFFFF"))
+  pp <- pp + theme(text=element_text(size=ts), plot.title=element_text(size=ts))
+  
+  plot(pp)
+  
+  ggsave(paste(outDir,
+               plotOutName,
+               sep="/"),
+         scale=s,
+         dpi=600,
+         height=h, width=w,
+         units="mm")
+  print(xtable(summary(lm.all),
+               caption=paste("summary of linear model for the interaction between estimated age of onset (aoo) and gene status (GS) on", metricName),
+               digits=c(0,2,2,2,2),
+               display=c("s","fg","fg","fg","g")),
+        include.rownames=TRUE,
+        file=outFile,
+        append=TRUE)
+  
+  print(xtable(summary(lm.all),
+               caption=paste("summary of linear model for the interaction between estimated age of onset (aoo) and gene status (GS) on", metricName),
+               digits=c(0,2,2,2,2),
+               display=c("s","fg","fg","fg","g")),
+        include.rownames=TRUE,
+        append=TRUE)
+
+  # now run linear mixed effects model model
+  # run model
+  mod <- lmer(values ~ GS * aoo + (1 | gene) + (1 | site) + (1 | Family),
+              data=dF,
+              REML=FALSE)
+  
+  print(xtable(summary(mod)[["coefficients"]],
+               caption="Linear mixed effects model, fixed effects",
+               digits=c(0,2,2,2),
+               display=c("s","fg","fg","fg")),
+        include.rownames=TRUE,
+        file=outFile,
+        append=TRUE)
+  
+  print(xtable(summary(mod)[["coefficients"]],
+               caption="Linear mixed effects model, fixed effects",
+               digits=c(0,2,2,2),
+               display=c("s","fg","fg","fg")),
+        include.rownames=TRUE,
+        append=TRUE)
+
+  print(xtable(data.frame(StdDev = c(attributes(VarCorr(mod)[[1]])[["stddev"]],
+                                     attributes(VarCorr(mod)[[2]])[["stddev"]],
+                                     attributes(VarCorr(mod))[["sc"]]),
+                          row.names = c("Family", "Site", "Residual")),                          
+               caption="Linear mixed effects model, random effects",
+               digits=c(0,2),
+               display=c("s","fg")),
+        include.rownames=TRUE,
+        file=outFile,
+        append=TRUE)
+  
+  # print the variance and standard deviation of the random effects
+  vc <- VarCorr(mod)
+  
+  print(xtable(data.frame(vc),
+               display=c("s","s","s","s","g","fg"),
+               digits=c(0,0,0,0,2,2),
+               caption="Variance of random effects"),
+        include.rownames=FALSE)
+  
+  print(xtable(data.frame(vc),
+               display=c("s","s","s","s","g","fg"),
+               digits=c(0,0,0,0,2,2),
+               caption="Variance of random effects"),
+        file=outFile,
+        append=TRUE,
+        include.rownames=FALSE)
+  
+  
+  # null model
+  nulMod <- lmer(values ~ aoo + (1 | gene) + (1 | site) + (1 | Family),
+                 data=dF,
+                 REML=FALSE)
+
+  modComparison <- anova(mod,nulMod)
+  
+  print(xtable(modComparison,
+               caption = "ANOVA between model and null model to account for variance explained by the gene status",
+               digits = c(0,0,2,2,2,2,2,2,2),
+               display = c("s","d","fg","fg","fg","fg","d","fg","fg")),
+        include.rownames=TRUE,
+        file=outFile,
+        append=TRUE)
+  
+  print(xtable(modComparison,
+               caption = "ANOVA between model and null model to account for variance explained by the gene status",
+               digits = c(0,0,2,2,2,2,2,2,2),
+               display = c("s","d","fg","fg","fg","fg","d","fg","fg")),
+        include.rownames=TRUE,
+        append=TRUE)
+  
+  # plot linear model NOT MIXED EFFECTS
+  dF.plot <- dF
+
+  p <- ggplot(dF.plot, aes_string(x="aoo", y="values", colour="GS", group="GS"))
+  p <- p + geom_point(size=ps)
+  pp <- p + geom_smooth(method="lm")
+  colList = unlist(cols[levels(dF.plot$GS)])
+  pp <- pp + scale_colour_manual(name="Group",values=as.vector(colList))
+  pp <- pp + labs(title=paste(metricName, "linear regression", sep="\n"), y=metricName, x="Estimated age of onset") + theme(axis.title.x=element_blank(), legend.key=element_rect(fill="white", colour="white"))
+  pp <- pp + theme_bw() + theme(legend.key = element_rect(colour="#FFFFFF", fill = "#FFFFFF"))
+  pp <- pp + theme(text=element_text(size=ts), plot.title=element_text(size=ts))
+
+  ggsave(paste(outDir,
+               plotOutName,
+               sep="/"),
+         scale=s,
+         dpi=600,
+         height=h, width=w,
+         units="mm")
+  
+  return(mod)
+}
+  
+graphTimeComparisonNL <- function(metric,
+                                metricName,
+                                sp, # spike percentage
+                                cols,
                                 startvec=NULL, # starting vectors for equation with quadratic term
                                 startvecCub=c(dc=0.000000001), # starting vectors for equation with cubic term
                                 weighted=TRUE, # is this a weighted metric?
@@ -597,180 +783,6 @@ graphTimeComparison <- function(metric,
   
   # merge age of onset data
   dF <- merge(dF, dF.aoo, by="wbic")
-  
-  lm.all <- lm(values ~ aoo*GS, data=dF)
-
-  print(xtable(summary(lm.all),
-               caption=paste("summary of linear model for the interaction between estimated age of onset (aoo) and gene status (GS) on", metricName),
-               digits=c(0,2,2,2,2),
-               display=c("s","fg","fg","fg","g")),
-        include.rownames=TRUE,
-        file=outFile,
-        append=TRUE)
-  
-  print(xtable(summary(lm.all),
-               caption=paste("summary of linear model for the interaction between estimated age of onset (aoo) and gene status (GS) on", metricName),
-               digits=c(0,2,2,2,2),
-               display=c("s","fg","fg","fg","g")),
-        include.rownames=TRUE,
-        append=TRUE)
-
-  # now run linear mixed effects model model
-  # run model
-  mod <- lmer(values ~ GS * aoo + (1 | Family) + (1 | site),
-              data=dF,
-              REML=FALSE)
-  
-  print(xtable(summary(mod)[["coefficients"]],
-               caption="Linear mixed effects model, fixed effects",
-               digits=c(0,2,2,2),
-               display=c("s","fg","fg","fg")),
-        include.rownames=TRUE,
-        file=outFile,
-        append=TRUE)
-  
-  print(xtable(summary(mod)[["coefficients"]],
-               caption="Linear mixed effects model, fixed effects",
-               digits=c(0,2,2,2),
-               display=c("s","fg","fg","fg")),
-        include.rownames=TRUE,
-        append=TRUE)
-
-  print(xtable(data.frame(StdDev = c(attributes(VarCorr(mod)[[1]])[["stddev"]],
-                                     attributes(VarCorr(mod)[[2]])[["stddev"]],
-                                     attributes(VarCorr(mod))[["sc"]]),
-                          row.names = c("Family", "Site", "Residual")),                          
-               caption="Linear mixed effects model, random effects",
-               digits=c(0,2),
-               display=c("s","fg")),
-        include.rownames=TRUE,
-        file=outFile,
-        append=TRUE)
-  
-  print(xtable(data.frame(StdDev = c(attributes(VarCorr(mod)[[1]])[["stddev"]],
-                                     attributes(VarCorr(mod)[[2]])[["stddev"]],
-                                     attributes(VarCorr(mod))[["sc"]]),
-                          row.names = c("Family", "Site", "Residual")),                          
-               caption="Linear mixed effects model, random effects",
-               digits=c(0,2),
-               display=c("s","fg")),
-        include.rownames=TRUE,
-        append=TRUE)
-
-  # null model
-  nulMod <- lmer(values ~ aoo + (1 | Family) + (1 | site),
-                 data=dF,
-                 REML=FALSE)
-
-  modComparison <- anova(mod,nulMod)
-  
-  print(xtable(modComparison,
-               caption = "ANOVA between model and null model to account for variance explained by the gene status",
-               digits = c(0,0,2,2,2,2,2,2,2),
-               display = c("s","d","fg","fg","fg","fg","d","fg","fg")),
-        include.rownames=TRUE,
-        file=outFile,
-        append=TRUE)
-  
-  print(xtable(modComparison,
-               caption = "ANOVA between model and null model to account for variance explained by the gene status",
-               digits = c(0,0,2,2,2,2,2,2,2),
-               display = c("s","d","fg","fg","fg","fg","d","fg","fg")),
-        include.rownames=TRUE,
-        append=TRUE)
-  
-  # first plot with control gene negative group included
-  dF.plot <- dF
-
-  p <- ggplot(dF.plot, aes_string(x="aoo", y="values", colour="GS", group="GS"))
-  p <- p + geom_point(size=ps)
-  pp <- p + geom_smooth(method="lm")
-  colList = unlist(cols[levels(dF.plot$GS)])
-  pp <- pp + scale_colour_manual(name="Group",values=as.vector(colList))
-  pp <- pp + labs(title=paste(metricName, "linear regression", sep="\n"), y=metricName, x="Estimated age of onset") + theme(axis.title.x=element_blank(), legend.key=element_rect(fill="white", colour="white"))
-  pp <- pp + theme_bw() + theme(legend.key = element_rect(colour="#FFFFFF", fill = "#FFFFFF"))
-  pp <- pp + theme(text=element_text(size=ts), plot.title=element_text(size=ts))
-
-  ggsave(paste(outDir,
-               paste(metric,"png",sep="."),
-               sep="/"),
-         scale=s,
-         dpi=600,
-         height=h, width=w,
-         units="mm")
-  
-  
-  # now exclude the gene negative group and do the regression and plot again
-  dF <- dF[dF$GS!="gene negative",]
-  
-  # now run linear mixed effects model model
-  # run model
-  mod <- lmer(values ~ GS * aoo + (1 | Family) + (1 | site),
-              data=dF,
-              REML=FALSE)
-  
-  print(xtable(summary(mod)[["coefficients"]],
-               caption="Linear mixed effects model, fixed effects",
-               digits=c(0,2,2,2),
-               display=c("s","fg","fg","fg")),
-        include.rownames=TRUE,
-        file=outFile,
-        append=TRUE)
-  
-  print(xtable(summary(mod)[["coefficients"]],
-               caption="Linear mixed effects model, fixed effects",
-               digits=c(0,2,2,2),
-               display=c("s","fg","fg","fg")),
-        include.rownames=TRUE,
-        append=TRUE)
-  
-  print(xtable(data.frame(StdDev = c(attributes(VarCorr(mod)[[1]])[["stddev"]],
-                                     attributes(VarCorr(mod)[[2]])[["stddev"]],
-                                     attributes(VarCorr(mod))[["sc"]]),
-                          row.names = c("Family", "Site", "Residual")),                          
-               caption="Linear mixed effects model, random effects",
-               digits=c(0,2),
-               display=c("s","fg")),
-        include.rownames=TRUE,
-        file=outFile,
-        append=TRUE)
-  
-  print(xtable(data.frame(StdDev = c(attributes(VarCorr(mod)[[1]])[["stddev"]],
-                                     attributes(VarCorr(mod)[[2]])[["stddev"]],
-                                     attributes(VarCorr(mod))[["sc"]]),
-                          row.names = c("Family", "Site", "Residual")),                          
-               caption="Linear mixed effects model, random effects",
-               digits=c(0,2),
-               display=c("s","fg")),
-        include.rownames=TRUE,
-        append=TRUE)
-  
-  # null model
-  nulMod <- lmer(values ~ aoo + (1 | Family) + (1 | site),
-                 data=dF,
-                 REML=FALSE)
-  
-  modComparison <- anova(mod,nulMod)
-  
-  print(xtable(modComparison,
-               caption = "ANOVA between model and null model to account for variance explained by the gene status",
-               digits = c(0,0,2,2,2,2,2,2,2),
-               display = c("s","d","fg","fg","fg","fg","d","fg","fg")),
-        include.rownames=TRUE,
-        file=outFile,
-        append=TRUE)
-  
-  print(xtable(modComparison,
-               caption = "ANOVA between model and null model to account for variance explained by the gene status",
-               digits = c(0,0,2,2,2,2,2,2,2),
-               display = c("s","d","fg","fg","fg","fg","d","fg","fg")),
-        include.rownames=TRUE,
-        append=TRUE)
-  
-  dF.plot <- dF
-  p <- ggplot(dF.plot, aes_string(x="aoo", y="values", colour="GS", group="GS"))
-  p <- p + geom_point(size=ps)
-  plot(p)
   
   # now run non-linear mixed effects model with a quadratic term
   nlOutFile = paste(outDir,
@@ -825,6 +837,10 @@ graphTimeComparison <- function(metric,
   print(summary(nlmq))
 
   # plot estimated values
+  dF.plot <- dF
+  p <- ggplot(dF.plot, aes_string(x="aoo", y="values", colour="GS", group="GS"))
+  p <- p + geom_point(size=ps)
+  
   x = seq(-45,25,by=1)
   dF.nlmq <- data.frame(x=x, y=SSquadFun(x, nlmq@beta[[1]], nlmq@beta[[2]], nlmq@beta[[3]]), GS="estimates")
   
@@ -1082,9 +1098,13 @@ breakpoint <- function(metric,
   # get summary
   br.summary <- summary(br)
   
+  # do statistical testing
+  dt = davies.test(mod, seg.Z=~aoo)
+  print(dt)
+  pVal = dt$p.value
+  
   # plot breakpoint data
   y = br$psi[[2]] * br$coefficients[[2]] + br$coefficients[[1]] # get the y value of the breakpoint
-  print(y)
   p <- ggplot(dF, aes_string(x="aoo", y="values", colour="GS"))
   p <- p + geom_point()
   p <- p + geom_segment(x=min(dF$aoo),
@@ -1105,5 +1125,102 @@ breakpoint <- function(metric,
   p <- p + theme_bw() + theme(legend.key = element_rect(colour="#FFFFFF", fill = "#FFFFFF"))
   p <- p + theme(text=element_text(size=ts), plot.title=element_text(size=ts))
   
-  return(list(br, p))
+  return(list(br, p, pVal))
+}
+
+
+breakPointDiscontinuous <- function(metric,
+                                    metricName,
+                                    sp, # spike percentage
+                                    cols,
+                                    edgePC=3,
+                                    outDir="wholebrainVsAOOResults",
+                                    weighted=FALSE,
+                                    ts=12){
+  if(weighted){
+    metric = paste(metric,"wt",sep="_")
+  }
+  
+  # create output directory
+  dir.create(outDir, showWarnings = FALSE)
+  
+  # define log output file
+  outFile = paste(outDir,
+                  paste(metric,"logFile.tex",sep="_"),
+                  sep="/")
+  
+  # create log file
+  initiateLog(outFile, metricName)
+  
+  ### function to plot and analyse the relationship between graph metrics and expected time to disease onset
+  # import graph metric data
+  dF <- importGraphData(metric, weighted, edgePC)
+  
+  # filter out gene negative subjects
+  dF <- dF[dF$GS!="gene negative",]
+  
+  # filter by spike percentage
+  dF <- applySP(dF, sp)
+  
+  # stack the data and take mean if a nodewise measure
+  dF <- stackIt(dF, metric) # changes the name of the metric to 'values'
+  
+  # get age of onset data
+  genfiData <- read.table("/home/tim/GENFI/genfi_Subjects_sjones_1_22_2015_17_47_47_restructure_summary.csv",
+                          sep="\t",
+                          header = TRUE)
+  
+  dF.aoo <- data.frame(wbic=genfiData$Subject,
+                       aoo=genfiData$Yrs.from.AV_AAO)
+  
+  # merge age of onset data
+  dF <- merge(dF, dF.aoo, by="wbic")
+  
+  #   # filter out affected subjects less than t=0 and gene positive greater than t=0
+  #   dF <- rbind(dF[dF$GS=="affected" && dF$aoo>=0,],
+  #               dF[dF$GS=="gene positive" && dF$aoo<=0,])
+  
+  # define breakpoint
+  bkpt = 0.
+  
+#   piecewise <- lmer(values ~ aoo*(aoo<bkpt) + aoo*(aoo>bkpt) + (1 | gene) + (1 | site) + (1 | Family),
+#                     data=dF,
+#                     REML=FALSE)
+  piecewise <- lm (values ~ aoo*(aoo<bkpt) + aoo*(aoo>bkpt), data=dF)
+
+  print(summary(piecewise))
+  
+  # compare with null model
+#   nulMod <- lmer(values ~ aoo + (1 | gene) + (1 | site) + (1 | Family),
+#                   data=dF,
+#                   REML=FALSE)
+  nulMod <- lm(values ~ aoo,
+               data=dF)
+  
+  modComparison <- anova(piecewise,nulMod)
+  
+  print(modComparison)
+  
+  print(xtable(modComparison,
+               caption = "ANOVA between model and null model to assess whether the segmented model fits better",
+               digits = c(0,0,2,2,2,2,2),
+               display = c("s","d","fg","fg","fg","fg","fg")),
+        include.rownames=TRUE,
+        file=outFile,
+        append=TRUE)
+  
+  print(xtable(modComparison,
+               caption = "ANOVA between model and null model to assess whether the segmented model fits better",
+               digits = c(0,0,2,2,2,2,2),
+               display = c("s","d","fg","fg","fg","fg","fg")),
+        include.rownames=TRUE,
+        append=TRUE)
+  
+  p <- ggplot(dF, aes_string(x="aoo", y="values", colour="GS"))
+  p <- p + geom_point()
+  
+  ### need to finish plot ###
+  
+  return(piecewise)
+  
 }
