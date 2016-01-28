@@ -231,15 +231,10 @@ wholeBrainAnalysis <- function(metric,
   names(tmpdF) <- names(ptSum)
   ptSum <- rbind(ptSum, tmpdF)
   
-  print(xtable(ptSum,
+  t1 <- xtable(ptSum,
                caption="Subjects included in the analysis",
                digits = c(0,0,0,0,0,0),
-               display = c("s", "s", "d", "d", "d","d")),
-        include.rownames=FALSE,
-        # file=outFile,
-        append=TRUE)
-  
-  
+               display = c("s", "s", "d", "d", "d","d"))
   
   # stack data and take the mean if it is a node-wise measures
   dF.wb <- stackIt(dF, metric)
@@ -253,31 +248,28 @@ wholeBrainAnalysis <- function(metric,
                                                 paste("(", sapply(sd(values[GS=="affected"], na.rm = TRUE),fn, a=2,b=3),   ")", sep=""))
                         )
   
-  
   print(xtable(dF.wb.summary[,-1],
                caption=paste("Mean and standard deviations for",metricName,"values in individuals")),
         include.rownames=FALSE,
         file=outFile,
         append=TRUE)
-    
   
-
   # ANOVA of the differences
   mod <- lm(values~GS*gene, data=dF.wb)
   mod.aov <- anova(mod)
   print(xtable(mod.aov,
                digits = c(0,0,2,2,1,2),
-               display = c("s","d", "fg", "fg", "f", "fg")),
+               display = c("s","d", "fg", "fg", "f", "fg"),
+               caption = paste("ANOVA of the difference in", metricName, "between diagnostic groups")),
         include.rownames=TRUE,
         file=outFile,
         append=TRUE)
-  
-  
-  print(xtable(mod.aov,
+
+  t2 <- xtable(mod.aov,
                digits = c(0,0,2,2,1,2),
-               display = c("s","d", "fg", "fg", "f", "fg")),
-        include.rownames=TRUE,
-        append=TRUE)
+               display = c("s","d", "fg", "fg", "f", "fg"),
+               caption = paste("ANOVA of the difference in", metricName, "between diagnostic groups"))
+  
   
   
   #### post hoc t-tests ####
@@ -295,11 +287,8 @@ wholeBrainAnalysis <- function(metric,
         file=outFile,
         append=TRUE)
   
-  print(xtable(pwTtests,
-               caption="Pairwise post-hoc t-test results"),
-        include.rownames=FALSE,
-        append=TRUE)
-  
+  t3 <- xtable(pwTtests,
+               caption="Pairwise post-hoc t-test results")
   
   # t-test for affected vs non-affected (gene negative and gene positive)
   anTtest <- t.test(dF.wb[dF.wb$GS=="affected","values"], dF.wb[dF.wb$GS!="affected","values"])
@@ -314,38 +303,13 @@ wholeBrainAnalysis <- function(metric,
         file=outFile,
         append=TRUE)
   
-  
-  
-  print(xtable(data.frame("t"=fn(anTtest[["statistic"]]),
+  t4 <- xtable(data.frame("t"=fn(anTtest[["statistic"]]),
                           "p"=fn(anTtest[["p.value"]])),
                caption="t-test between affected subjects and non-affected (both gene negative and gene positive unaffected",
                digits=c(0,2,2),
                display=c("s","fg","fg")
-               ),
-        include.rownames=FALSE,
-        append=TRUE)
+               )
         
-  # now do a plot for group differences, collapsed across genes
-  p <- ggplot(dF.wb, aes_string(x="GS", y="values", fill="GS"))
-  p <- p + geom_boxplot()
-  p <- p + scale_colour_manual(name="Group",values=as.vector(colList))
-  
-  xList = seq_along(levels(dF$GS))
-  names(xList) = levels(dF$GS)
-  for(n in seq(length(pwGS[1,]))){
-    pVal = as.numeric(as.character(pwTtests[n, "p"]))
-    d1 = pwGS[1,n]
-    d2 = pwGS[2,n]
-    p <- addSigBar(p, pVal, d1, d2, xList)
-  }
-  
-  p <- p + theme_bw()
-  p <- p + labs(y=metricName) + theme(axis.title.x=element_blank())
-  p <- p + theme(text=element_text(size=ts))
-  ggsave(paste(outDir,
-               paste(metric,"allgroups.png",sep="_"),
-               sep="/"))
-  
   dF.wb.summary = ddply(dF.wb, .(gene), summarise,
                         "gene negative" = paste(sapply(mean(values[GS=="gene negative"], na.rm = TRUE), fn),
                                                 paste("(", sapply(sd(values[GS=="gene negative"], na.rm = TRUE),fn),   ")", sep="")),
@@ -360,9 +324,8 @@ wholeBrainAnalysis <- function(metric,
         file=outFile,
         append=TRUE)
   
-  print(xtable(dF.wb.summary,
-               caption=paste("Mean and standard deviations for",metricName," values in individuals")),
-        append=TRUE)
+  t5 <- xtable(dF.wb.summary,
+               caption=paste("Mean and standard deviations for",metricName," values in individuals"))
   
   # # plot this
   # err <- function(x) qnorm(0.975) * sd(x, na.rm = TRUE)/sqrt(length(x)) # function for standard error
@@ -396,12 +359,31 @@ wholeBrainAnalysis <- function(metric,
         file=outFile,
         append=TRUE)
   
-  print(xtable(dF.tResults,
+  t6 <- xtable(dF.tResults,
                caption="t-test between diagnostic groups within each gene",
                digits=c(0,0,0,2,2),
-               display=c("s","s","s","fg","fg")),
-        include.rownames=FALSE,
-        append=TRUE)
+               display=c("s","s","s","fg","fg"))
+  
+  # now do a plot for group differences, collapsed across genes
+  p <- ggplot(dF.wb, aes_string(x="GS", y="values", fill="GS"))
+  p <- p + geom_boxplot()
+  p <- p + scale_colour_manual(name="Group",values=as.vector(colList))
+  
+  xList = seq_along(levels(dF$GS))
+  names(xList) = levels(dF$GS)
+  for(n in seq(length(pwGS[1,]))){
+    pVal = as.numeric(as.character(pwTtests[n, "p"]))
+    d1 = pwGS[1,n]
+    d2 = pwGS[2,n]
+    p <- addSigBar(p, pVal, d1, d2, xList)
+  }
+  
+  p <- p + theme_bw()
+  p <- p + labs(y=metricName) + theme(axis.title.x=element_blank())
+  p <- p + theme(text=element_text(size=ts))
+  ggsave(paste(outDir,
+               paste(metric,"allgroups.png",sep="_"),
+               sep="/"))
   
   # now do a plot for group differences for separate genes
   # p <- ggplot(dF.stacked.plot, aes_string(x="unique", y="valuesMean", middle="valuesMean", group="unique", fill="gene", upper="upper", lower="lower"))
@@ -436,9 +418,10 @@ wholeBrainAnalysis <- function(metric,
   ggsave(paste(outDir,
                paste(metric,"byGene.png",sep="_"),
                sep="/"))
+  
   endLog(outFile)
   
-  return(list(p,pg))
+  return(list(t1, t2, t3, t4, t5, t6, p,pg))
 }
 
 wholeBrainAnalysisMixedEffects <- function(metric,
@@ -485,70 +468,70 @@ wholeBrainAnalysisMixedEffects <- function(metric,
   # print random effects of the model
   mod.coef <- ranef(mod)
   
-  print(xtable(mod.coef$site,
-               digits=c(0,2),
-               display=c("s", "fg"),
-               caption = "Linear mixed effects model, site coefficients"),
-        file=outFile,
-        append=TRUE)
-  
-  print(xtable(mod.coef$gene,
-               digits=c(0,2),
-               display=c("s", "fg"),
-               caption = "Linear mixed effects model, gene coefficients"),
-        file=outFile,
-        append=TRUE)
-
-  print(xtable(mod.coef$site,
+  t1 <- xtable(mod.coef$site,
                  digits=c(0,2),
                  display=c("s", "fg"),
-               caption = "Linear mixed effects model, site coefficients"))
-  
-  
-  print(xtable(mod.coef$gene,
+               caption = "Linear mixed effects model, site coefficients")
+
+  t2 <- xtable(mod.coef$gene,
                digits=c(0,2),
                display=c("s", "fg"),
-               caption = "Linear mixed effects model, gene coefficients"))
+               caption = "Linear mixed effects model, gene coefficients")
   
+  t3 <- xtable(mod.coef$Family,
+               digits=c(0,2),
+               display=c("s", "fg"),
+               caption = "Linear mixed effects model, family coefficients")
   
+  print(t1, file=outFile, append=TRUE)
+  print(t2, file=outFile, append=TRUE)
+  print(t3, file=outFile, append=TRUE)
+  
+  # plot random effects
+  dF.plot.site <- data.frame(site = row.names(mod.coef$site),
+                             effect = mod.coef$site[[1]])
+  p1 <- ggplot(dF.plot.site, aes_string(x="site",y="effect"))
+  p1 <- p1 + geom_bar(stat="identity") + theme_bw() + ggtitle("Effect size of scan site")
+  
+  dF.plot.gene <- data.frame(gene = row.names(mod.coef$gene),
+                             effect = mod.coef$gene[[1]])
+  p2 <- ggplot(dF.plot.gene, aes_string(x="gene",y="effect"))
+  p2 <- p2 + geom_bar(stat="identity") + theme_bw() + ggtitle("Effect size of gene")
+  
+  dF.plot.Family <- data.frame(Family = row.names(mod.coef$Family),
+                             effect = mod.coef$Family[[1]])
+  p3 <- ggplot(dF.plot.Family, aes_string(x="Family",y="effect"))
+  p3 <- p3 + geom_bar(stat="identity") + theme_bw() + ggtitle("Effect size of family")
+  p3 <- p3 + theme(axis.text.x=element_blank())
+
   # print variances
   vc <- VarCorr(mod)
 
-  print(xtable(data.frame(vc),
+  t4 <- xtable(data.frame(vc),
                display=c("s","s","s","s","g","fg"),
                digits=c(0,0,0,0,2,2),
-               caption="Variance of random effects"),
-        include.rownames=FALSE)
+               caption="Variance of random effects")
 
-  print(xtable(data.frame(vc),
-               display=c("s","s","s","s","g","fg"),
-               digits=c(0,0,0,0,2,2),
-               caption="Variance of random effects"),
+  print(t4,
         file=outFile,
         append=TRUE,
         include.rownames=FALSE)
   
   
-
   # Type II ANOVA
   mod.avo <- Anova(mod, type="II")
   
-  print(xtable(mod.avo,
+  t5 <- xtable(mod.avo,
                digits=c(0,1,1,2),
                display=c("s","f","d","fg"),
                caption=paste("ANOVA of linear mixed effects model for", metricName))
-        )
   
-  print(xtable(mod.avo,
-               digits=c(0,1,1,2),
-               display=c("s","f","d","fg"),
-               caption=paste("ANOVA of linear mixed effects model for", metricName)),
+  print(t5,
         file=outFile,
-        append=TRUE
-  )
+        append=TRUE)
   
-  
-  return(mod)
+
+  return(list(t1, t2, t3, t4, t5, p1, p2, p3))
 }
 
 graphTimeComparison <- function(metric,
@@ -1175,8 +1158,8 @@ breakPointDiscontinuous <- function(metric,
   
   # merge age of onset data
   dF <- merge(dF, dF.aoo, by="wbic")
-  
-  #   # filter out affected subjects less than t=0 and gene positive greater than t=0
+
+    #   # filter out affected subjects less than t=0 and gene positive greater than t=0
   #   dF <- rbind(dF[dF$GS=="affected" && dF$aoo>=0,],
   #               dF[dF$GS=="gene positive" && dF$aoo<=0,])
   
@@ -1186,10 +1169,23 @@ breakPointDiscontinuous <- function(metric,
 #   piecewise <- lmer(values ~ aoo*(aoo<bkpt) + aoo*(aoo>bkpt) + (1 | gene) + (1 | site) + (1 | Family),
 #                     data=dF,
 #                     REML=FALSE)
-  piecewise <- lm (values ~ aoo*(aoo<bkpt) + aoo*(aoo>bkpt), data=dF)
+  piecewise <- lm (values ~ aoo*(aoo<bkpt) + aoo*(aoo>=bkpt), data=dF)
 
-  print(summary(piecewise))
+  print(xtable(summary(piecewise),
+               caption = "Summary of discontinuous piecewise regression analysis",
+               digits = c(0,2,2,2,2),
+               display = c("s","fg","fg","fg","g")),
+        include.rownames=TRUE,
+        file=outFile,
+        append=TRUE)
   
+  print(xtable(summary(piecewise),
+               caption = "Summary of discontinuous piecewise regression analysis",
+               digits = c(0,2,2,2,2),
+               display = c("s","fg","fg","fg","g")),
+        include.rownames=TRUE,
+        append=TRUE)
+
   # compare with null model
 #   nulMod <- lmer(values ~ aoo + (1 | gene) + (1 | site) + (1 | Family),
 #                   data=dF,
@@ -1198,8 +1194,6 @@ breakPointDiscontinuous <- function(metric,
                data=dF)
   
   modComparison <- anova(piecewise,nulMod)
-  
-  print(modComparison)
   
   print(xtable(modComparison,
                caption = "ANOVA between model and null model to assess whether the segmented model fits better",
@@ -1216,10 +1210,11 @@ breakPointDiscontinuous <- function(metric,
         include.rownames=TRUE,
         append=TRUE)
   
-  p <- ggplot(dF, aes_string(x="aoo", y="values", colour="GS"))
-  p <- p + geom_point()
+#   p <- ggplot(dF, aes_string(x="aoo", y="values", colour="GS"))
+#   p <- p + geom_point()
   
   ### need to finish plot ###
+  return(list(piecewise,p))
   
   return(piecewise)
   
