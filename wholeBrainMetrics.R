@@ -430,7 +430,8 @@ wholeBrainAnalysisMixedEffects <- function(metric,
                                            sp, weighted=TRUE,
                                            outDir="wholebrainResults",
                                            edgePC=3, ts=12,
-                                           exclNeg=FALSE){
+                                           exclNeg=FALSE,
+                                           family=FALSE){
   
   if(weighted){
     metric = paste(metric,"wt",sep="_")
@@ -461,9 +462,15 @@ wholeBrainAnalysisMixedEffects <- function(metric,
   dF.wb <- stackIt(dF, metric)
 
   # ANOVA of the differences
-  mod <- lmer(values ~ GS + (1 | gene) + (1 | site) + (1 | Family),
-              data=dF.wb,
-              REML=FALSE)
+  if(family){
+    mod <- lmer(values ~ GS + (1 | gene) + (1 | site) + (1 | Family),
+                data=dF.wb,
+                REML=FALSE)
+  } else {
+    mod <- lmer(values ~ GS + (1 | gene) + (1 | site),
+                data=dF.wb,
+                REML=FALSE)
+  }
   
   # print random effects of the model
   mod.coef <- ranef(mod)
@@ -478,10 +485,15 @@ wholeBrainAnalysisMixedEffects <- function(metric,
                display=c("s", "fg"),
                caption = "Linear mixed effects model, gene coefficients")
   
-  t3 <- xtable(mod.coef$Family,
-               digits=c(0,2),
-               display=c("s", "fg"),
-               caption = "Linear mixed effects model, family coefficients")
+  if(family){
+    t3 <- xtable(mod.coef$Family,
+                 digits=c(0,2),
+                 display=c("s", "fg"),
+                 caption = "Linear mixed effects model, family coefficients")
+  } else {
+    t3 = NA
+  }
+  
   
   print(t1, file=outFile, append=TRUE)
   print(t2, file=outFile, append=TRUE)
@@ -498,11 +510,16 @@ wholeBrainAnalysisMixedEffects <- function(metric,
   p2 <- ggplot(dF.plot.gene, aes_string(x="gene",y="effect"))
   p2 <- p2 + geom_bar(stat="identity") + theme_bw() + ggtitle("Effect size of gene")
   
-  dF.plot.Family <- data.frame(Family = row.names(mod.coef$Family),
-                             effect = mod.coef$Family[[1]])
-  p3 <- ggplot(dF.plot.Family, aes_string(x="Family",y="effect"))
-  p3 <- p3 + geom_bar(stat="identity") + theme_bw() + ggtitle("Effect size of family")
-  p3 <- p3 + theme(axis.text.x=element_blank())
+  if(family){
+    dF.plot.Family <- data.frame(Family = row.names(mod.coef$Family),
+                                 effect = mod.coef$Family[[1]])
+    p3 <- ggplot(dF.plot.Family, aes_string(x="Family",y="effect"))
+    p3 <- p3 + geom_bar(stat="identity") + theme_bw() + ggtitle("Effect size of family")
+    p3 <- p3 + theme(axis.text.x=element_blank())
+  } else {
+    p3 = NA
+  }
+  
 
   # print variances
   vc <- VarCorr(mod)
@@ -516,7 +533,6 @@ wholeBrainAnalysisMixedEffects <- function(metric,
         file=outFile,
         append=TRUE,
         include.rownames=FALSE)
-  
   
   # Type II ANOVA
   mod.avo <- Anova(mod, type="II")
@@ -542,7 +558,8 @@ graphTimeComparison <- function(metric,
                                 outDir="wholebrainVsAOOResults",
                                 edgePC=3,
                                 h=30,w=45,s=4,ts=12,ps=4,
-                                exclNeg=TRUE){
+                                exclNeg=TRUE,
+                                family=FALSE){
   if(weighted){
     metric = paste(metric,"wt",sep="_")
   }
@@ -594,14 +611,12 @@ graphTimeComparison <- function(metric,
   
   p <- ggplot(dF.plot, aes_string(x="aoo", y="values", colour="GS", group="GS"))
   p <- p + geom_point(size=ps)
-  pp <- p + geom_smooth(method="lm")
+  p1 <- p + geom_smooth(method="lm")
   colList = unlist(cols[levels(dF.plot$GS)])
-  pp <- pp + scale_colour_manual(name="Group",values=as.vector(colList))
-  pp <- pp + labs(title=paste(metricName, "linear regression", sep="\n"), y=metricName, x="Estimated age of onset") + theme(axis.title.x=element_blank(), legend.key=element_rect(fill="white", colour="white"))
-  pp <- pp + theme_bw() + theme(legend.key = element_rect(colour="#FFFFFF", fill = "#FFFFFF"))
-  pp <- pp + theme(text=element_text(size=ts), plot.title=element_text(size=ts))
-  
-  plot(pp)
+  p1 <- p1 + scale_colour_manual(name="Group",values=as.vector(colList))
+  p1 <- p1 + labs(title=paste(metricName, "linear regression", sep="\n"), y=metricName, x="Estimated age of onset") + theme(axis.title.x=element_blank(), legend.key=element_rect(fill="white", colour="white"))
+  p1 <- p1 + theme_bw() + theme(legend.key = element_rect(colour="#FFFFFF", fill = "#FFFFFF"))
+  p1 <- p1 + theme(text=element_text(size=ts), plot.title=element_text(size=ts))
   
   ggsave(paste(outDir,
                plotOutName,
@@ -610,49 +625,71 @@ graphTimeComparison <- function(metric,
          dpi=600,
          height=h, width=w,
          units="mm")
-  print(xtable(summary(lm.all),
+
+  t1 <- xtable(summary(lm.all),
                caption=paste("summary of linear model for the interaction between estimated age of onset (aoo) and gene status (GS) on", metricName),
                digits=c(0,2,2,2,2),
-               display=c("s","fg","fg","fg","g")),
+               display=c("s","fg","fg","fg","g"))
+  
+  print(t1,
         include.rownames=TRUE,
         file=outFile,
         append=TRUE)
   
-  print(xtable(summary(lm.all),
-               caption=paste("summary of linear model for the interaction between estimated age of onset (aoo) and gene status (GS) on", metricName),
-               digits=c(0,2,2,2,2),
-               display=c("s","fg","fg","fg","g")),
-        include.rownames=TRUE,
-        append=TRUE)
-
   # now run linear mixed effects model model
   # run model
-  mod <- lmer(values ~ GS * aoo + (1 | gene) + (1 | site) + (1 | Family),
-              data=dF,
-              REML=FALSE)
+  if(family){
+    mod <- lmer(values ~ GS * aoo + (1 | gene) + (1 | site) + (1 | Family),
+                data=dF,
+                REML=FALSE)
+  } else {
+    mod <- lmer(values ~ GS * aoo + (1 | gene) + (1 | site),
+                data=dF,
+                REML=FALSE)
+  }
   
-  print(xtable(summary(mod)[["coefficients"]],
+  
+  # plot random effects
+  mod.coef <- ranef(mod)
+  dF.plot.site <- data.frame(site = row.names(mod.coef$site),
+                             effect = mod.coef$site[[1]])
+  p2 <- ggplot(dF.plot.site, aes_string(x="site",y="effect"))
+  p2 <- p2 + geom_bar(stat="identity") + theme_bw() + ggtitle("Effect size of scan site")
+  
+  dF.plot.gene <- data.frame(gene = row.names(mod.coef$gene),
+                             effect = mod.coef$gene[[1]])
+  p3 <- ggplot(dF.plot.gene, aes_string(x="gene",y="effect"))
+  p3 <- p3 + geom_bar(stat="identity") + theme_bw() + ggtitle("Effect size of gene")
+  
+  if(family){
+    dF.plot.Family <- data.frame(Family = row.names(mod.coef$Family),
+                                 effect = mod.coef$Family[[1]])
+    p4 <- ggplot(dF.plot.Family, aes_string(x="Family",y="effect"))
+    p4 <- p4 + geom_bar(stat="identity") + theme_bw() + ggtitle("Effect size of family")
+    p4 <- p4 + theme(axis.text.x=element_blank())
+  } else {
+    p4 = NA
+  }
+  
+  t2 <- xtable(summary(mod)[["coefficients"]],
                caption="Linear mixed effects model, fixed effects",
                digits=c(0,2,2,2),
-               display=c("s","fg","fg","fg")),
+               display=c("s","fg","fg","fg"))
+
+  print(t2,
         include.rownames=TRUE,
         file=outFile,
         append=TRUE)
   
-  print(xtable(summary(mod)[["coefficients"]],
-               caption="Linear mixed effects model, fixed effects",
-               digits=c(0,2,2,2),
-               display=c("s","fg","fg","fg")),
-        include.rownames=TRUE,
-        append=TRUE)
-
-  print(xtable(data.frame(StdDev = c(attributes(VarCorr(mod)[[1]])[["stddev"]],
+  t3 <- xtable(data.frame(StdDev = c(attributes(VarCorr(mod)[[1]])[["stddev"]],
                                      attributes(VarCorr(mod)[[2]])[["stddev"]],
                                      attributes(VarCorr(mod))[["sc"]]),
                           row.names = c("Family", "Site", "Residual")),                          
                caption="Linear mixed effects model, random effects",
                digits=c(0,2),
-               display=c("s","fg")),
+               display=c("s","fg"))
+  
+  print(t3,
         include.rownames=TRUE,
         file=outFile,
         append=TRUE)
@@ -660,64 +697,41 @@ graphTimeComparison <- function(metric,
   # print the variance and standard deviation of the random effects
   vc <- VarCorr(mod)
   
-  print(xtable(data.frame(vc),
+  t4 <- xtable(data.frame(vc),
                display=c("s","s","s","s","g","fg"),
                digits=c(0,0,0,0,2,2),
-               caption="Variance of random effects"),
-        include.rownames=FALSE)
+               caption="Variance of random effects")
   
-  print(xtable(data.frame(vc),
-               display=c("s","s","s","s","g","fg"),
-               digits=c(0,0,0,0,2,2),
-               caption="Variance of random effects"),
+  print(t4,
         file=outFile,
         append=TRUE,
         include.rownames=FALSE)
   
-  
   # null model
-  nulMod <- lmer(values ~ aoo + (1 | gene) + (1 | site) + (1 | Family),
-                 data=dF,
-                 REML=FALSE)
+  if(family){
+    nulMod <- lmer(values ~ aoo + (1 | gene) + (1 | site) + (1 | Family),
+                   data=dF,
+                   REML=FALSE)
+  } else {
+    nulMod <- lmer(values ~ aoo + (1 | gene) + (1 | site),
+                   data=dF,
+                   REML=FALSE)
+  }
+  
 
   modComparison <- anova(mod,nulMod)
   
-  print(xtable(modComparison,
+  t5 <- xtable(modComparison,
                caption = "ANOVA between model and null model to account for variance explained by the gene status",
                digits = c(0,0,2,2,2,2,2,2,2),
-               display = c("s","d","fg","fg","fg","fg","d","fg","fg")),
+               display = c("s","d","fg","fg","fg","fg","d","fg","fg"))
+  
+  print(t5,
         include.rownames=TRUE,
         file=outFile,
         append=TRUE)
   
-  print(xtable(modComparison,
-               caption = "ANOVA between model and null model to account for variance explained by the gene status",
-               digits = c(0,0,2,2,2,2,2,2,2),
-               display = c("s","d","fg","fg","fg","fg","d","fg","fg")),
-        include.rownames=TRUE,
-        append=TRUE)
-  
-  # plot linear model NOT MIXED EFFECTS
-  dF.plot <- dF
-
-  p <- ggplot(dF.plot, aes_string(x="aoo", y="values", colour="GS", group="GS"))
-  p <- p + geom_point(size=ps)
-  pp <- p + geom_smooth(method="lm")
-  colList = unlist(cols[levels(dF.plot$GS)])
-  pp <- pp + scale_colour_manual(name="Group",values=as.vector(colList))
-  pp <- pp + labs(title=paste(metricName, "linear regression", sep="\n"), y=metricName, x="Estimated age of onset") + theme(axis.title.x=element_blank(), legend.key=element_rect(fill="white", colour="white"))
-  pp <- pp + theme_bw() + theme(legend.key = element_rect(colour="#FFFFFF", fill = "#FFFFFF"))
-  pp <- pp + theme(text=element_text(size=ts), plot.title=element_text(size=ts))
-
-  ggsave(paste(outDir,
-               plotOutName,
-               sep="/"),
-         scale=s,
-         dpi=600,
-         height=h, width=w,
-         units="mm")
-  
-  return(mod)
+  return(list(t1, t2, t3, t4, t5, p1, p2, p3, p4))
 }
   
 graphTimeComparisonNL <- function(metric,
