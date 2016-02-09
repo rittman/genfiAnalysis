@@ -43,7 +43,7 @@ importGraphData <- function(metric, weighted, edgePC=3){
   
   # convert diagnostic label to a factor and rename
   dF$GS = as.factor(dF$GS)
-  dF$GS = revalue(dF$GS, c("0" = "gene negative", "1"="gene positive", "2"="affected"))
+  dF$GS = revalue(dF$GS, c("0" = "gene negative", "1"="gene carriers", "2"="FTD"))
   dF$site = as.factor(dF$site)
   
   # return dataframe with graph metrics
@@ -132,7 +132,7 @@ cubicFun <- function(x, ac,bc,cc,dd){
   return(y)
 }
 
-addSigBar <- function(p, pVal, d1, d2, xList, sig.value=0.05){
+addSigBar <- function(p, pVal, d1, d2, xList, sig.value=0.05, excludeNegs=FALSE){
   if(pVal < sig.value){
     ymax = ggplot_build(p)$panel$ranges[[1]]$y.range[2]
     ymin = ggplot_build(p)$panel$ranges[[1]]$y.range[1]
@@ -159,7 +159,8 @@ addSigBar <- function(p, pVal, d1, d2, xList, sig.value=0.05){
   return(p)
 }
 
-addSigBarGenes <- function(p, pVal, d1, d2, xList, ymax, ng, sig.value=0.05){
+addSigBarGenes <- function(p, pVal, d1, d2, xList, ymax, ng, sig.value=0.05, excludeNegs=FALSE){
+  nLen=3
   if(pVal < sig.value){
     ymin = ggplot_build(p)$panel$ranges[[1]]$y.range[1]
     ygap = ymax - ymin
@@ -176,9 +177,9 @@ addSigBarGenes <- function(p, pVal, d1, d2, xList, ymax, ng, sig.value=0.05){
     ymax = ymax + .15*ygap
     
     ypos = ymax - ygap*.05
-    xpos1 = xList[d1]/3 + (ng-1) + 1/3 - (xList[d1]-2)*.08
+    xpos1 = xList[d1]/nLen + (ng-1) + 1/nLen - (xList[d1]-nLen-1)*.08
     
-    xpos2 = xList[d2]/3 + (ng-1) + 1/3 - (xList[d2]-2)*.08
+    xpos2 = xList[d2]/nLen + (ng-1) + 1/nLen - (xList[d2]-nLen-1)*.08
     
     p <- p + geom_segment(x=xpos1, xend=xpos2, y=ypos, yend=ypos, colour="black")
     p <- p + annotate("text", x=mean(c(xpos1, xpos2)), y=ypos, label=pVal.plot, colour="black", size=8)
@@ -192,8 +193,9 @@ wholeBrainAnalysis <- function(metric,
                                metricName,
                                cols,
                                sp, weighted=TRUE,
-                               outDir="wholebrainResults",
-                               edgePC=3, ts=12){
+                               outDir="wholeBrainResults",
+                               edgePC=3, ts=12,  # ts = text size
+                               excludeNegs=FALSE){ # TRUE to exclude gene negative subjects
   
   if(weighted){
     metric = paste(metric,"wt",sep="_")
@@ -216,13 +218,18 @@ wholeBrainAnalysis <- function(metric,
   # apply spike percentage threshold
   dF <- applySP(dF, sp)
   
+  if(excludeNegs){
+    dF <- dF[dF$GS!="gene negative",]
+    dF$GS <- factor(as.character(dF$GS), levels=c("gene carriers", "FTD"))
+  }
+  
   colList = unlist(cols[levels(dF$GS)])
   
   # Summarise the patient data
   ptSum = ddply(dF, .(gene), summarise,
                 "gene negative" = length(GS[GS=="gene negative"]),
-                "gene positive" = length(GS[GS=="gene positive"]),
-                "affected"      = length(GS[GS=="affected"])
+                "gene carriers" = length(GS[GS=="gene carriers"]),
+                "FTD"      = length(GS[GS=="FTD"])
   )
   ptSum <- data.frame(ptSum, Totals=rowSums(ptSum[,-1]))
   tmpdF <- data.frame(gene="Totals",
@@ -239,14 +246,25 @@ wholeBrainAnalysis <- function(metric,
   # stack data and take the mean if it is a node-wise measures
   dF.wb <- stackIt(dF, metric)
   
-  dF.wb.summary = ddply(dF.wb, .(), summarise,
-                        "gene negative" = paste(sapply(mean(values[GS=="gene negative"], na.rm = TRUE), fn, a=2,b=3),
-                                                paste("(", sapply(sd(values[GS=="gene negative"], na.rm = TRUE), fn, a=2,b=3),   ")", sep="")),
-                        "gene positive" = paste(sapply(mean(values[GS=="gene positive"], na.rm = TRUE), fn, a=2,b=3),
-                                                paste("(", sapply(sd(values[GS=="gene positive"], na.rm = TRUE),fn, a=2,b=3),   ")", sep="")),
-                        "affected"      = paste(sapply(mean(values[GS=="affected"], na.rm = TRUE),fn, a=2,b=3),
-                                                paste("(", sapply(sd(values[GS=="affected"], na.rm = TRUE),fn, a=2,b=3),   ")", sep=""))
-                        )
+  if(!excludeNegs){
+    dF.wb.summary = ddply(dF.wb, .(), summarise,
+                          "gene negative" = paste(sapply(mean(values[GS=="gene negative"], na.rm = TRUE), fn, a=2,b=3),
+                                                  paste("(", sapply(sd(values[GS=="gene negative"], na.rm = TRUE), fn, a=2,b=3),   ")", sep="")),
+                          "gene carriers" = paste(sapply(mean(values[GS=="gene carriers"], na.rm = TRUE), fn, a=2,b=3),
+                                                  paste("(", sapply(sd(values[GS=="gene carriers"], na.rm = TRUE),fn, a=2,b=3),   ")", sep="")),
+                          "FTD"      = paste(sapply(mean(values[GS=="FTD"], na.rm = TRUE),fn, a=2,b=3),
+                                                  paste("(", sapply(sd(values[GS=="FTD"], na.rm = TRUE),fn, a=2,b=3),   ")", sep=""))
+    )
+    
+  } else {
+    dF.wb.summary = ddply(dF.wb, .(), summarise,
+                          "gene carriers" = paste(sapply(mean(values[GS=="gene carriers"], na.rm = TRUE), fn, a=2,b=3),
+                                                  paste("(", sapply(sd(values[GS=="gene carriers"], na.rm = TRUE),fn, a=2,b=3),   ")", sep="")),
+                          "FTD"      = paste(sapply(mean(values[GS=="FTD"], na.rm = TRUE),fn, a=2,b=3),
+                                                  paste("(", sapply(sd(values[GS=="FTD"], na.rm = TRUE),fn, a=2,b=3),   ")", sep=""))
+    )
+    
+  }
   
   print(xtable(dF.wb.summary[,-1],
                caption=paste("Mean and standard deviations for",metricName,"values in individuals")),
@@ -254,22 +272,23 @@ wholeBrainAnalysis <- function(metric,
         file=outFile,
         append=TRUE)
   
+  if(excludeNegs){
+    dF.wb <- dF.wb[dF.wb$GS!="gene negative",]
+    dF.wb$GS <- as.factor(as.character(dF.wb$GS))
+  }
   # ANOVA of the differences
   mod <- lm(values~GS*gene, data=dF.wb)
   mod.aov <- anova(mod)
-  print(xtable(mod.aov,
-               digits = c(0,0,2,2,1,2),
-               display = c("s","d", "fg", "fg", "f", "fg"),
-               caption = paste("ANOVA of the difference in", metricName, "between diagnostic groups")),
-        include.rownames=TRUE,
-        file=outFile,
-        append=TRUE)
 
   t2 <- xtable(mod.aov,
                digits = c(0,0,2,2,1,2),
                display = c("s","d", "fg", "fg", "f", "fg"),
                caption = paste("ANOVA of the difference in", metricName, "between diagnostic groups"))
   
+  print(t2,
+        include.rownames=TRUE,
+        file=outFile,
+        append=TRUE)
   
   
   #### post hoc t-tests ####
@@ -280,52 +299,63 @@ wholeBrainAnalysis <- function(metric,
   names(pwTtests) <- c("comparison", "t", "p")
   pwTtests[,2] <- as.numeric(as.character(pwTtests[,2]))
   pwTtests[,3] <- as.numeric(as.character(pwTtests[,3]))
-
-  print(xtable(pwTtests,
-               caption="Pairwise post-hoc t-test results"),
-        include.rownames=FALSE,
-        file=outFile,
-        append=TRUE)
   
   t3 <- xtable(pwTtests,
-               caption="Pairwise post-hoc t-test results")
+               caption="Pairwise post-hoc t-test results",
+               digits = c(0,0,2,2),
+               display = c("s", "s", "fg", "fg"))
   
-  # t-test for affected vs non-affected (gene negative and gene positive)
-  anTtest <- t.test(dF.wb[dF.wb$GS=="affected","values"], dF.wb[dF.wb$GS!="affected","values"])
-  
-  print(xtable(data.frame("t"=as.numeric(as.character(fn(anTtest[["statistic"]]))),
-                          "p"=as.numeric(as.character(fn(anTtest[["p.value"]])))),
-               caption="t-test between affected subjects and non-affected (both gene negative and gene positive unaffected)",
-               digits=c(0,2,2),
-               display=c("s","fg","fg")
-               ),
+  print(t3,
         include.rownames=FALSE,
         file=outFile,
         append=TRUE)
   
-  t4 <- xtable(data.frame("t"=fn(anTtest[["statistic"]]),
-                          "p"=fn(anTtest[["p.value"]])),
-               caption="t-test between affected subjects and non-affected (both gene negative and gene positive unaffected",
-               digits=c(0,2,2),
-               display=c("s","fg","fg")
-               )
-        
-  dF.wb.summary = ddply(dF.wb, .(gene), summarise,
-                        "gene negative" = paste(sapply(mean(values[GS=="gene negative"], na.rm = TRUE), fn),
-                                                paste("(", sapply(sd(values[GS=="gene negative"], na.rm = TRUE),fn),   ")", sep="")),
-                        "gene positive" = paste(sapply(mean(values[GS=="gene positive"], na.rm = TRUE), fn),
-                                                paste("(", sapply(sd(values[GS=="gene positive"], na.rm = TRUE),fn),   ")", sep="")),
-                        "affected"      = paste(sapply(mean(values[GS=="affected"], na.rm = TRUE),fn),
-                                                paste("(", sapply(sd(values[GS=="affected"], na.rm = TRUE), fn),   ")", sep=""))
-  )
+  if(!excludeNegs){
+    # t-test for affected vs non-affected (gene negative and gene positive)
+    anTtest <- t.test(dF.wb[dF.wb$GS=="FTD","values"], dF.wb[dF.wb$GS!="FTD","values"])
+    
+    
+    
+    t4 <- xtable(data.frame("t"=fn(anTtest[["statistic"]]),
+                            "p"=fn(anTtest[["p.value"]])),
+                 caption="t-test between affected subjects and non-affected (both gene negative and gene positive unaffected",
+                 digits=c(0,2,2),
+                 display=c("s","fg","fg")
+    )
+    
+    print(t4,
+          include.rownames=FALSE,
+          file=outFile,
+          append=TRUE)
+  }
   
-  print(xtable(dF.wb.summary,
-               caption=paste("Mean and standard deviations for",metricName," values in individuals")),
-        file=outFile,
-        append=TRUE)
+  if(excludeNegs){
+    dF.wb.summary = ddply(dF.wb, .(gene), summarise,
+                          "gene carriers" = paste(sapply(mean(values[GS=="gene carriers"], na.rm = TRUE), fn),
+                                                  paste("(", sapply(sd(values[GS=="gene carriers"], na.rm = TRUE),fn),   ")", sep="")),
+                          "FTD"      = paste(sapply(mean(values[GS=="FTD"], na.rm = TRUE),fn),
+                                                  paste("(", sapply(sd(values[GS=="FTD"], na.rm = TRUE), fn),   ")", sep=""))
+    )
+    
+  } else {
+    dF.wb.summary = ddply(dF.wb, .(gene), summarise,
+                          "gene negative" = paste(sapply(mean(values[GS=="gene negative"], na.rm = TRUE), fn),
+                                                  paste("(", sapply(sd(values[GS=="gene negative"], na.rm = TRUE),fn),   ")", sep="")),
+                          "gene carriers" = paste(sapply(mean(values[GS=="gene carriers"], na.rm = TRUE), fn),
+                                                  paste("(", sapply(sd(values[GS=="gene carriers"], na.rm = TRUE),fn),   ")", sep="")),
+                          "FTD"      = paste(sapply(mean(values[GS=="FTD"], na.rm = TRUE),fn),
+                                                  paste("(", sapply(sd(values[GS=="FTD"], na.rm = TRUE), fn),   ")", sep=""))
+    )
+    
+  }
   
+
   t5 <- xtable(dF.wb.summary,
                caption=paste("Mean and standard deviations for",metricName," values in individuals"))
+  
+  print(t5,
+        file=outFile,
+        append=TRUE)
   
   # # plot this
   # err <- function(x) qnorm(0.975) * sd(x, na.rm = TRUE)/sqrt(length(x)) # function for standard error
@@ -351,23 +381,23 @@ wholeBrainAnalysis <- function(metric,
   dF.tResults[,3] <- as.numeric(as.character(dF.tResults[,3]))
   dF.tResults[,4] <- as.numeric(as.character(dF.tResults[,4]))
   
-  print(xtable(dF.tResults,
-               caption="t-test between diagnostic groups within each gene",
-               digits=c(0,0,0,2,2),
-               display=c("s","s","s","fg","fg")),
-        include.rownames=FALSE,
-        file=outFile,
-        append=TRUE)
-  
   t6 <- xtable(dF.tResults,
                caption="t-test between diagnostic groups within each gene",
                digits=c(0,0,0,2,2),
                display=c("s","s","s","fg","fg"))
   
+  print(t6,
+        include.rownames=FALSE,
+        file=outFile,
+        append=TRUE)
+  
   # now do a plot for group differences, collapsed across genes
+  # reorder factors if gene negatives removed
+  if(excludeNegs){
+    dF.wb$GS <- factor(dF$GS, levels=c("gene carriers", "FTD"))
+  }
   p <- ggplot(dF.wb, aes_string(x="GS", y="values", fill="GS"))
   p <- p + geom_boxplot()
-  p <- p + scale_colour_manual(name="Group",values=as.vector(colList))
   
   xList = seq_along(levels(dF$GS))
   names(xList) = levels(dF$GS)
@@ -381,15 +411,25 @@ wholeBrainAnalysis <- function(metric,
   p <- p + theme_bw()
   p <- p + labs(y=metricName) + theme(axis.title.x=element_blank())
   p <- p + theme(text=element_text(size=ts))
+  p <- p + scale_fill_manual(name="Group",values=as.vector(colList))
+  p <- p + theme(legend.position="none") 
+  
+  if(excludeNegs){
+    outw = 2.5
+  } else {
+    outw = 3
+  }
   ggsave(paste(outDir,
                paste(metric,"allgroups.png",sep="_"),
-               sep="/"))
+               sep="/"),
+         height=2.5, width=outw, units="in", dpi=600)
   
   # now do a plot for group differences for separate genes
   # p <- ggplot(dF.stacked.plot, aes_string(x="unique", y="valuesMean", middle="valuesMean", group="unique", fill="gene", upper="upper", lower="lower"))
   pg <- ggplot(dF.wb, aes_string(x="gene", y="values", fill="GS"))
   pg <- pg + geom_boxplot()
-  pg <- pg + scale_colour_manual(name="Group",values=as.vector(colList))
+  pg <- pg + scale_fill_manual(name="Group",values=as.vector(colList))
+  pg <- pg + theme(legend.position="none") 
   
   xList = seq_along(levels(dF$GS))
   names(xList) = levels(dF$GS)
@@ -404,7 +444,7 @@ wholeBrainAnalysis <- function(metric,
       pVal = as.numeric(as.character(dF.tResults[dF.tResults$gene==gene,][n, "p"]))
       d1 = pwGS[1,n]
       d2 = pwGS[2,n]
-      pL <- addSigBarGenes(pg, pVal, d1, d2, xList, ytop, ng)
+      pL <- addSigBarGenes(pg, pVal, d1, d2, xList, ytop, ng, excludeNegs=excludeNegs)
       pg = pL[["p"]]
       ytop = pL[["ymax"]]
     }
@@ -417,7 +457,8 @@ wholeBrainAnalysis <- function(metric,
   
   ggsave(paste(outDir,
                paste(metric,"byGene.png",sep="_"),
-               sep="/"))
+               sep="/"),
+         height=2.5, width=outw, units="in", dpi=600)
   
   endLog(outFile)
   
@@ -428,7 +469,7 @@ wholeBrainAnalysisMixedEffects <- function(metric,
                                            metricName,
                                            cols,
                                            sp, weighted=TRUE,
-                                           outDir="wholebrainResults",
+                                           outDir="wholeBrainResults",
                                            edgePC=3, ts=12,
                                            exclNeg=FALSE,
                                            family=FALSE){
@@ -497,7 +538,7 @@ wholeBrainAnalysisMixedEffects <- function(metric,
   
   print(t1, file=outFile, append=TRUE)
   print(t2, file=outFile, append=TRUE)
-  print(t3, file=outFile, append=TRUE)
+  if(family){print(t3, file=outFile, append=TRUE)}
   
   # plot random effects
   dF.plot.site <- data.frame(site = row.names(mod.coef$site),
@@ -555,7 +596,7 @@ graphTimeComparison <- function(metric,
                                 sp, # spike percentage
                                 cols,
                                 weighted=TRUE, # is this a weighted metric?
-                                outDir="wholebrainVsAOOResults",
+                                outDir="wholeBrainVsAOOResults",
                                 edgePC=3,
                                 h=30,w=45,s=4,ts=12,ps=4,
                                 exclNeg=TRUE,
@@ -595,6 +636,7 @@ graphTimeComparison <- function(metric,
   
   # merge age of onset data
   dF <- merge(dF, dF.aoo, by="wbic")
+  dF <- unique(dF) # remove duplicates that may have sneaked in
   
   # if indicated exclude gene negative group
   plotOutName = paste(metric,"png",sep=".")
@@ -604,7 +646,11 @@ graphTimeComparison <- function(metric,
     plotOutName = paste(paste(metric, "GenePos", sep=""),"png",sep=".")
   }
 
+  # simple linear 
   lm.all <- lm(values ~ aoo*GS, data=dF)
+  
+  # null model - assumes no interaction between onset and gene status
+  lm.null <- lm(values ~ aoo+GS, data=dF)
 
   # plot linear model NOT MIXED EFFECTS
   dF.plot <- dF
@@ -636,14 +682,27 @@ graphTimeComparison <- function(metric,
         file=outFile,
         append=TRUE)
   
+  # comparison with null model
+  aov.lm.null <- anova(lm.all, lm.null)
+  
+  t2 <- xtable(aov.lm.null,
+               display=c("s","d","fg","d","fg","fg","fg"),
+               digits = c(0, 0, 2, 0, 2, 2, 2),
+               caption = "Assessment of whether there is a difference between slopes of gene positive and gene affected groups by comparing models including and excluding and interaction between age at onset and gene status")
+  
+  print(t2,
+        include.rownames=FALSE,
+        file=outFile,
+        append=TRUE)
+  
   # now run linear mixed effects model model
   # run model
   if(family){
-    mod <- lmer(values ~ GS * aoo + (1 | gene) + (1 | site) + (1 | Family),
+    mod <- lmer(values ~ aoo * GS + (1 | gene) + (1 | site) + (1 | Family),
                 data=dF,
                 REML=FALSE)
   } else {
-    mod <- lmer(values ~ GS * aoo + (1 | gene) + (1 | site),
+    mod <- lmer(values ~ aoo * GS + (1 | gene) + (1 | site),
                 data=dF,
                 REML=FALSE)
   }
@@ -671,17 +730,17 @@ graphTimeComparison <- function(metric,
     p4 = NA
   }
   
-  t2 <- xtable(summary(mod)[["coefficients"]],
+  t3 <- xtable(summary(mod)[["coefficients"]],
                caption="Linear mixed effects model, fixed effects",
                digits=c(0,2,2,2),
                display=c("s","fg","fg","fg"))
 
-  print(t2,
+  print(t3,
         include.rownames=TRUE,
         file=outFile,
         append=TRUE)
   
-  t3 <- xtable(data.frame(StdDev = c(attributes(VarCorr(mod)[[1]])[["stddev"]],
+  t4 <- xtable(data.frame(StdDev = c(attributes(VarCorr(mod)[[1]])[["stddev"]],
                                      attributes(VarCorr(mod)[[2]])[["stddev"]],
                                      attributes(VarCorr(mod))[["sc"]]),
                           row.names = c("Family", "Site", "Residual")),                          
@@ -689,7 +748,7 @@ graphTimeComparison <- function(metric,
                digits=c(0,2),
                display=c("s","fg"))
   
-  print(t3,
+  print(t4,
         include.rownames=TRUE,
         file=outFile,
         append=TRUE)
@@ -697,41 +756,41 @@ graphTimeComparison <- function(metric,
   # print the variance and standard deviation of the random effects
   vc <- VarCorr(mod)
   
-  t4 <- xtable(data.frame(vc),
+  t5 <- xtable(data.frame(vc),
                display=c("s","s","s","s","g","fg"),
                digits=c(0,0,0,0,2,2),
                caption="Variance of random effects")
   
-  print(t4,
+  print(t5,
         file=outFile,
         append=TRUE,
         include.rownames=FALSE)
   
   # null model
+  # this assumes there is no interaction between the gene status and age of onset
   if(family){
-    nulMod <- lmer(values ~ aoo + (1 | gene) + (1 | site) + (1 | Family),
+    nulMod <- lmer(values ~ aoo + GS + (1 | gene) + (1 | site) + (1 | Family),
                    data=dF,
                    REML=FALSE)
   } else {
-    nulMod <- lmer(values ~ aoo + (1 | gene) + (1 | site),
+    nulMod <- lmer(values ~ aoo + GS + (1 | gene) + (1 | site),
                    data=dF,
                    REML=FALSE)
   }
   
-
   modComparison <- anova(mod,nulMod)
   
-  t5 <- xtable(modComparison,
-               caption = "ANOVA between model and null model to account for variance explained by the gene status",
+  t6 <- xtable(modComparison,
+               caption = "Assessment of whether there is a difference between slopes of gene positive and gene affected groups by comparing models including and excluding and interaction between age at onset and gene status",
                digits = c(0,0,2,2,2,2,2,2,2),
                display = c("s","d","fg","fg","fg","fg","d","fg","fg"))
   
-  print(t5,
+  print(t6,
         include.rownames=TRUE,
         file=outFile,
         append=TRUE)
   
-  return(list(t1, t2, t3, t4, t5, p1, p2, p3, p4))
+  return(list(t1, t2, t3, t4, t5, t6, p1, p2, p3, p4))
 }
   
 graphTimeComparisonNL <- function(metric,
@@ -741,7 +800,7 @@ graphTimeComparisonNL <- function(metric,
                                 startvec=NULL, # starting vectors for equation with quadratic term
                                 startvecCub=c(dc=0.000000001), # starting vectors for equation with cubic term
                                 weighted=TRUE, # is this a weighted metric?
-                                outDir="wholebrainVsAOOResults",
+                                outDir="wholeBrainVsAOOResults",
                                 edgePC=3,
                                 h=30,w=45,s=4,ts=12,ps=4,
                                 sink=TRUE){
@@ -780,6 +839,7 @@ graphTimeComparisonNL <- function(metric,
   
   # merge age of onset data
   dF <- merge(dF, dF.aoo, by="wbic")
+  dF <- unique(dF) # remove duplicates that may have sneaked in
   
   # now run non-linear mixed effects model with a quadratic term
   nlOutFile = paste(outDir,
@@ -842,10 +902,10 @@ graphTimeComparisonNL <- function(metric,
   dF.nlmq <- data.frame(x=x, y=SSquadFun(x, nlmq@beta[[1]], nlmq@beta[[2]], nlmq@beta[[3]]), GS="estimates")
   
   pq <- p + geom_line(data=dF.nlmq, aes_string(x="x", y="y"))
-  cList = c("affected", "estimates", "gene positive")
+  cList = c("FTD", "estimates", "gene carriers")
   colList = unlist(cols[cList])
   pq <- pq + scale_colour_manual(name="Group",values=as.vector(colList),
-                                 breaks=c("gene positive", "affected", "estimates"))
+                                 breaks=c("gene carriers", "FTD", "estimates"))
   pq <- pq + theme_bw() + theme(legend.key=element_rect(fill="white", colour="white"))
   pq <- pq + labs(title=paste(metricName, "non-linear regression, quadratic", sep="\n"), y=metricName, x="Estimated time from onset")# + theme(axis.title.x=element_blank())
   pq <- pq + theme(text=element_text(size=ts), plot.title=element_text(size=ts), plot.title=element_text(size=ts))
@@ -914,7 +974,7 @@ graphTimeComparisonNL <- function(metric,
   # pc <- ggplot()
   pc <- p + geom_line(data=dF.nlmc, aes_string(x="x", y="y"))
   pc <- pc + scale_colour_manual(name="Group",values=as.vector(colList),
-                                 breaks=c("gene positive", "affected", "estimates"))
+                                 breaks=c("gene carriers", "FTD", "estimates"))
   pc <- pc + theme_bw() + theme(legend.key=element_rect(fill="white", colour="white"))
   pc <- pc + labs(title=paste(metricName, "non-linear regression, cubic", sep="\n"), y=metricName, x="Estimated time from onset")# + theme(axis.title.x=element_blank())
   pc <- pc + theme(text=element_text(size=ts), plot.title=element_text(size=ts))
@@ -1013,8 +1073,8 @@ startVecListQ = list(degree        = c(aq = 29.8,   bq = 0.000001, cq = 0.000001
                      )
 
 cols <- list("gene negative"="#E69F00",
-             "gene positive"="#56B4E9",
-             "affected"="#D55E00",
+             "gene carriers"="#56B4E9",
+             "FTD"="#D55E00",
              "estimates"="#000000"
              )
 
@@ -1040,7 +1100,7 @@ breakpoint <- function(metric,
                        sp, # spike percentage
                        cols,
                        edgePC=3,
-                       outDir="wholebrainVsAOOResults",
+                       outDir="wholeBrainVsAOOResults",
                        weighted=FALSE,
                        ts=12){
   if(weighted){
@@ -1081,10 +1141,11 @@ breakpoint <- function(metric,
   
   # merge age of onset data
   dF <- merge(dF, dF.aoo, by="wbic")
-
+  dF <- unique(dF) # remove duplicates that may have sneaked in
+  
 #   # filter out affected subjects less than t=0 and gene positive greater than t=0
-#   dF <- rbind(dF[dF$GS=="affected" && dF$aoo>=0,],
-#               dF[dF$GS=="gene positive" && dF$aoo<=0,])
+#   dF <- rbind(dF[dF$GS=="FTD" && dF$aoo>=0,],
+#               dF[dF$GS=="gene carriers" && dF$aoo<=0,])
   
   # create model
   mod <- lm(values ~ aoo, data=dF)
@@ -1131,7 +1192,7 @@ breakPointDiscontinuous <- function(metric,
                                     sp, # spike percentage
                                     cols,
                                     edgePC=3,
-                                    outDir="wholebrainVsAOOResults",
+                                    outDir="wholeBrainVsAOOResults",
                                     weighted=FALSE,
                                     ts=12){
   if(weighted){
@@ -1161,7 +1222,7 @@ breakPointDiscontinuous <- function(metric,
   
   # stack the data and take mean if a nodewise measure
   dF <- stackIt(dF, metric) # changes the name of the metric to 'values'
-  
+
   # get age of onset data
   genfiData <- read.table("/home/tim/GENFI/genfi_Subjects_sjones_1_22_2015_17_47_47_restructure_summary.csv",
                           sep="\t",
@@ -1172,10 +1233,15 @@ breakPointDiscontinuous <- function(metric,
   
   # merge age of onset data
   dF <- merge(dF, dF.aoo, by="wbic")
-
-    #   # filter out affected subjects less than t=0 and gene positive greater than t=0
-  #   dF <- rbind(dF[dF$GS=="affected" && dF$aoo>=0,],
-  #               dF[dF$GS=="gene positive" && dF$aoo<=0,])
+  dF <- unique(dF) # remove duplicates that may have sneaked in
+  
+  # make small adjustment for a set of twins in family 172
+  dup <- which(duplicated(dF$aoo))
+  dF[dup,"aoo"] <- dF[dup,"aoo"] + 0.001
+  
+  #   # filter out affected subjects less than t=0 and gene positive greater than t=0
+  #   dF <- rbind(dF[dF$GS=="FTD" && dF$aoo>=0,],
+  #               dF[dF$GS=="gene carriers" && dF$aoo<=0,])
   
   # define breakpoint
   bkpt = 0.
@@ -1185,21 +1251,20 @@ breakPointDiscontinuous <- function(metric,
 #                     REML=FALSE)
   piecewise <- lm (values ~ aoo*(aoo<bkpt) + aoo*(aoo>=bkpt), data=dF)
 
-  print(xtable(summary(piecewise),
-               caption = "Summary of discontinuous piecewise regression analysis",
-               digits = c(0,2,2,2,2),
-               display = c("s","fg","fg","fg","g")),
+  print(t1,
         include.rownames=TRUE,
         file=outFile,
         append=TRUE)
   
-  print(xtable(summary(piecewise),
+  t1 <- xtable(summary(piecewise),
                caption = "Summary of discontinuous piecewise regression analysis",
                digits = c(0,2,2,2,2),
-               display = c("s","fg","fg","fg","g")),
+               display = c("s","fg","fg","fg","g"))
+  print(t1,
         include.rownames=TRUE,
+        file=outFile,
         append=TRUE)
-
+  
   # compare with null model
 #   nulMod <- lmer(values ~ aoo + (1 | gene) + (1 | site) + (1 | Family),
 #                   data=dF,
@@ -1208,28 +1273,215 @@ breakPointDiscontinuous <- function(metric,
                data=dF)
   
   modComparison <- anova(piecewise,nulMod)
-  
-  print(xtable(modComparison,
+
+  t2 <- xtable(modComparison,
                caption = "ANOVA between model and null model to assess whether the segmented model fits better",
                digits = c(0,0,2,2,2,2,2),
-               display = c("s","d","fg","fg","fg","fg","fg")),
+               display = c("s","d","fg","fg","fg","fg","fg"))
+  
+  print(t2,
         include.rownames=TRUE,
         file=outFile,
         append=TRUE)
   
-  print(xtable(modComparison,
-               caption = "ANOVA between model and null model to assess whether the segmented model fits better",
-               digits = c(0,0,2,2,2,2,2),
-               display = c("s","d","fg","fg","fg","fg","fg")),
-        include.rownames=TRUE,
-        append=TRUE)
+  # plot breakpoint data
+  y <- piecewise$coefficients[[1]] # get the y value of the piecewiseeakpoint
+  p <- ggplot(dF, aes_string(x="aoo", y="values", colour="GS"))
+  p <- p + geom_point()
+  p <- p + geom_segment(x=min(dF$aoo),
+                        xend=0.,
+                        y=min(dF$aoo)*(piecewise$coefficients[[2]]+piecewise$coefficients[[5]])+y+piecewise$coefficients[[3]],
+                        yend=y+piecewise$coefficients[[3]],
+                        colour="black")
   
-#   p <- ggplot(dF, aes_string(x="aoo", y="values", colour="GS"))
-#   p <- p + geom_point()
+  p <- p + geom_segment(x=0.,
+                        xend=max(dF$aoo),
+                        y=y,
+                        yend=max(dF$aoo)*piecewise$coefficients[[2]]+piecewise$coefficients[[1]],
+                        colour="black")
+  
+  colList = unlist(cols[levels(dF$GS)])
+  p <- p + scale_colour_manual(name="Group",values=as.vector(colList))
+  p <- p + labs(title=paste(metricName, "discontinuous breakpoint analysis", sep="\n"), y=metricName, x="Estimated age of onset") + theme(axis.title.x=element_blank(), legend.key=element_rect(fill="white", colour="white"))
+  p <- p + theme_bw() + theme(legend.key = element_rect(colour="#FFFFFF", fill = "#FFFFFF"))
+  p <- p + theme(text=element_text(size=ts), plot.title=element_text(size=ts))
+  
+  ggsave(paste(outDir,
+               paste(metric,"DiscontBkpt.png",sep="_"),
+               sep="/"))
   
   ### need to finish plot ###
-  return(list(piecewise,p))
+  return(list(t1, t2 ,p))
+}
+
+countIt <- function(x,n){return(length(x[x==n]))}
+
+demographics <- function(demog, typeList, exclNeg=FALSE){
+  # import graph data
+  dF <- importGraphData("geNorm", FALSE)
+  if(exclNeg){
+    dF <- dF[dF$GS!="gene negative",]
+  }
   
-  return(piecewise)
+  type=typeList[demog]
+
+  # merge with demographic data
+  dF.demog <- read.table("../genfi_Subjects_sjones_1_22_2015_17_47_47_restructure_summary.csv", sep="\t", header = TRUE)
+  names(dF.demog)[4] <- "wbic"
+  dF <- merge(dF, dF.demog[,-which(names(dF.demog)=="GS")], by = c("wbic"))
+  names(dF)[which(names(dF)==demog)] <- "demog"
   
+  # create summary table of demographic data
+  if(type=="continuous"){
+    dF.wb = ddply(dF, .(GS), summarise,
+                  mean = mean(demog, na.rm = TRUE),
+                  sd = sd(demog, na.rm = TRUE)
+    )
+    row.names(dF.wb) <- dF.wb[,"GS"]
+    dF.wb <- dF.wb[,-1]
+  } else if(type=="ordinal"){
+    dF.wb = ddply(dF, .(GS), summarise,
+                  count0 = countIt(demog,0),
+                  count1 = countIt(demog,1),
+                  count2 = countIt(demog,2)
+    )
+    row.names(dF.wb) <- dF.wb[,"GS"]
+    dF.wb <- dF.wb[,-1]
+  }
+
+  # do statistical test
+  if(type=="continuous"){
+    # ANOVA
+    mod <- lm(demog~GS,data=dF)
+    mod.aov <- Anova(mod, type="II")
+    
+    # post-hoc t-tests
+    if(!exclNeg){
+      negVsFTD <- t.test(dF[dF$GS=="gene negative","demog"], dF[dF$GS=="FTD","demog"])
+      negVsCarrier <- t.test(dF[dF$GS=="gene negative","demog"], dF[dF$GS=="gene carriers","demog"])
+    } else {
+      negVsFTD = list(p.value=NA,
+                      statistic=NA)
+      negVsCarrier = list(p.value=NA,
+                          statistic=NA)
+    }
+    FTDVsCarrier <- t.test(dF[dF$GS=="FTD","demog"], dF[dF$GS=="gene carriers","demog"])
+    
+    if(exclNeg){
+      return(list(Demographic=demog,
+                  DOF=mod.aov[["Df"]][[1]],
+                  pVal=mod.aov[["Pr(>F)"]][[1]],
+                  Fval=mod.aov[["F value"]][[1]],
+                  ChiSq=NA,
+                  geneCarriers=paste(round(dF.wb[["gene carriers", "mean"]], digits=1),
+                                     " (",round(dF.wb[["gene carriers", "sd"]], digits=1),")",
+                                     sep=""),
+                  FTD=paste(round(dF.wb[["FTD", "mean"]], digits=1),
+                            " (",round(dF.wb[["FTD", "sd"]], digits=1),")",
+                            sep=""),
+                  # negVsFTD.t=negVsFTD[["statistic"]],
+                  # negVsFTD.p=negVsFTD[["p.value"]],
+                  # negVsCarrier.t=negVsCarrier[["statistic"]],
+                  # negVsCarrier.p=negVsCarrier[["p.value"]],
+                  # FTDVsCarrier.t=FTDVsCarrier[["statistic"]],
+                  FTDVsCarrier.p=FTDVsCarrier[["p.value"]]
+      )
+      )
+    } else {
+      return(list(Demographic=demog,
+                  DOF=mod.aov[["Df"]][[1]],
+                  pVal=mod.aov[["Pr(>F)"]][[1]],
+                  Fval=mod.aov[["F value"]][[1]],
+                  ChiSq=NA,
+                  geneNeg=paste(round(dF.wb[["gene negative", "mean"]], digits=1),
+                                " (",round(dF.wb[["gene negative", "sd"]], digits=1),")",
+                                sep=""),
+                  geneCarriers=paste(round(dF.wb[["gene carriers", "mean"]], digits=1),
+                                     " (",round(dF.wb[["gene carriers", "sd"]], digits=1),")",
+                                     sep=""),
+                  FTD=paste(round(dF.wb[["FTD", "mean"]], digits=1),
+                            " (",round(dF.wb[["FTD", "sd"]], digits=1),")",
+                            sep=""),
+                  # negVsFTD.t=negVsFTD[["statistic"]],
+                  negVsFTD.p=negVsFTD[["p.value"]],
+                  # negVsCarrier.t=negVsCarrier[["statistic"]],
+                  negVsCarrier.p=negVsCarrier[["p.value"]],
+                  # FTDVsCarrier.t=FTDVsCarrier[["statistic"]],
+                  FTDVsCarrier.p=FTDVsCarrier[["p.value"]]
+                  )
+             )
+    }
+  } else if(type=="ordinal"){
+    dF.cst <- chisq.test(dF.wb[,c(-1,-3)])
+    
+    if(sum(dF.wb[,"count2"]!=0)){
+      if(!exclNeg){
+        geneNeg=paste(dF.wb[["gene negative", "count0"]],
+                      dF.wb[["gene negative", "count1"]],
+                      dF.wb[["gene negative", "count2"]],
+                      sep="/")
+      } else {
+        geneNeg=NA
+      }
+      
+      geneCarriers=paste(dF.wb[["gene carriers", "count0"]],
+                         dF.wb[["gene carriers", "count1"]],
+                         dF.wb[["gene carriers", "count2"]],
+                         sep="/")
+      FTD=paste(dF.wb[["FTD", "count0"]],
+                dF.wb[["FTD", "count1"]],
+                dF.wb[["FTD", "count2"]],
+                sep="/")
+    } else {
+      if(!exclNeg){
+        geneNeg=paste(dF.wb[["gene negative", "count0"]],
+                      dF.wb[["gene negative", "count1"]],
+                      sep="/")
+      } else {
+        geneNeg=NA
+      }
+      
+      geneCarriers=paste(dF.wb[["gene carriers", "count0"]],
+                         dF.wb[["gene carriers", "count1"]],
+                         sep="/")
+      FTD=paste(dF.wb[["FTD", "count0"]],
+                dF.wb[["FTD", "count1"]],
+                sep="/")
+    }
+    
+    if(exclNeg){
+      return(list(Demographic=demog,
+                  DOF=dF.cst$parameter,
+                  pVal=dF.cst$p.value,
+                  Fval=NA,
+                  ChiSq=dF.cst$statistic,
+                  geneCarriers=geneCarriers,
+                  FTD=FTD,
+                  # negVsFTD.t=NA,
+                  # negVsFTD.p=NA,
+                  # negVsCarrier.t=NA,
+                  # negVsCarrier.p=NA,
+                  # FTDVsCarrier.t=NA,
+                  FTDVsCarrier.p=NA
+                  )
+             )
+    } else {
+      return(list(Demographic=demog,
+                  DOF=dF.cst$parameter,
+                  pVal=dF.cst$p.value,
+                  Fval=NA,
+                  ChiSq=dF.cst$statistic,
+                  geneNeg=geneNeg,
+                  geneCarriers=geneCarriers,
+                  FTD=FTD,
+                  # negVsFTD.t=NA,
+                  negVsFTD.p=NA,
+                  # negVsCarrier.t=NA,
+                  negVsCarrier.p=NA,
+                  # FTDVsCarrier.t=NA,
+                  FTDVsCarrier.p=NA
+                  )
+             )
+    }
+  }
 }
