@@ -31,7 +31,12 @@ fn <- function(x,a=1,b=2){
 
 importGraphData <- function(metric, weighted, edgePC=3){
   # define input file
-  inFile = paste("d2",metric,"local",sep="_")
+  if(weighted){
+    inFile = paste("d2",metric,"wt","local",sep="_")
+  } else {
+    inFile = paste("d2",metric,"local",sep="_")
+  }
+  
   
   # import data
   dF = read.table(paste(genfiDir,inFile, sep="/"), header = TRUE, na.strings = "NA")
@@ -51,12 +56,20 @@ importGraphData <- function(metric, weighted, edgePC=3){
 }
 
 applySP <- function(dF, sp, spVal=10){
+  # this function filters by spike percentage, but also removes subjects with <100 volumes
   # combine data with spike percentage data
   sp.sub <- data.frame(wbic=sp$id, spMean=sp$mean)
   dF <- merge(dF, sp.sub, by="wbic")
   
   # filter by spike percentage
   dF <- dF[dF$spMean < spVal,]
+  
+  # filter by length of scan
+  dF.demog <- read.table("../genfi_Subjects_sjones_1_22_2015_17_47_47_restructure_summary.csv", sep="\t", header = TRUE)
+  names(dF.demog)[4] <- "wbic"
+  dF.demog <- dF.demog[dF.demog$scan_duration>100,] # exclude lines with subjects with only short scans
+  
+  dF <- dF[dF$wbic %in% dF.demog[,"wbic"],]
   
   # return filtered data
   return(dF)
@@ -82,7 +95,7 @@ stackIt <- function(dF, metric){
   return(dF.wb)
 }
 
-initiateLog <- function(outFile, metricName){
+initiateLog <- function(logFile, metricName){
   header = c("\\documentclass[a4paper,10pt]{article}",
              "\\usepackage[utf8]{inputenc}",
              paste("\\title{GENFI data,",metricName,"}"),
@@ -100,12 +113,12 @@ initiateLog <- function(outFile, metricName){
              "\\maketitle")
   
   write(paste(header, collapse="\n"),
-        file=outFile,
+        file=logFile,
         append=FALSE)
 }
 
-endLog <- function(outFile){
-  write("\\end{document}", file=outFile, append=TRUE)
+endLog <- function(logFile){
+  write("\\end{document}", file=logFile, append=TRUE)
 }
 set.seed(1)
 SSquadFun <- selfStart(~aq + bq*x + cq*x^2,
@@ -196,21 +209,26 @@ wholeBrainAnalysis <- function(metric,
                                outDir="wholeBrainResults",
                                edgePC=3, ts=12,  # ts = text size
                                excludeNegs=FALSE){ # TRUE to exclude gene negative subjects
-  
-  if(weighted){
-    metric = paste(metric,"wt",sep="_")
-  }
-  
   # create output directory
   dir.create(outDir, showWarnings = FALSE)
   
   # define log output file
-  outFile = paste(outDir,
-                  paste(metric,"logFile.tex",sep="_"),
-                  sep="/")
+  if(weighted){
+    outFile = paste(outDir,
+                    paste(metric,"wt",sep="_"),
+                    sep="/")
+    
+  } else {
+    outFile = paste(outDir,
+                    paste(metric,sep="_"),
+                    sep="/")
+    
+  }
+  
+  logFile = paste(outFile, "logFile.tex", sep="_")
   
   # create log file
-  initiateLog(outFile, metricName)
+  initiateLog(logFile, metricName)
   
   # import graph data
   dF <- importGraphData(metric, weighted, edgePC)
@@ -269,7 +287,7 @@ wholeBrainAnalysis <- function(metric,
   print(xtable(dF.wb.summary[,-1],
                caption=paste("Mean and standard deviations for",metricName,"values in individuals")),
         include.rownames=FALSE,
-        file=outFile,
+        file=logFile,
         append=TRUE)
   
   if(excludeNegs){
@@ -287,7 +305,7 @@ wholeBrainAnalysis <- function(metric,
   
   print(t2,
         include.rownames=TRUE,
-        file=outFile,
+        file=logFile,
         append=TRUE)
   
   
@@ -307,7 +325,7 @@ wholeBrainAnalysis <- function(metric,
   
   print(t3,
         include.rownames=FALSE,
-        file=outFile,
+        file=logFile,
         append=TRUE)
   
   if(!excludeNegs){
@@ -325,7 +343,7 @@ wholeBrainAnalysis <- function(metric,
     
     print(t4,
           include.rownames=FALSE,
-          file=outFile,
+          file=logFile,
           append=TRUE)
   }
   
@@ -354,7 +372,7 @@ wholeBrainAnalysis <- function(metric,
                caption=paste("Mean and standard deviations for",metricName," values in individuals"))
   
   print(t5,
-        file=outFile,
+        file=logFile,
         append=TRUE)
   
   # # plot this
@@ -388,7 +406,7 @@ wholeBrainAnalysis <- function(metric,
   
   print(t6,
         include.rownames=FALSE,
-        file=outFile,
+        file=logFile,
         append=TRUE)
   
   # now do a plot for group differences, collapsed across genes
@@ -419,9 +437,9 @@ wholeBrainAnalysis <- function(metric,
   } else {
     outw = 3
   }
-  ggsave(paste(outDir,
-               paste(metric,"allgroups.png",sep="_"),
-               sep="/"),
+  
+  plotFile = paste(paste(outFile,"allgroups.png",sep="_"), "png", sep=".")
+  ggsave(plotFile,
          height=2.5, width=outw, units="in", dpi=600)
   
   # now do a plot for group differences for separate genes
@@ -455,12 +473,11 @@ wholeBrainAnalysis <- function(metric,
   pg <- pg + labs(y=metricName) + theme(axis.title.x=element_blank())
   pg <- pg + theme(text=element_text(size=ts))
   
-  ggsave(paste(outDir,
-               paste(metric,"byGene.png",sep="_"),
-               sep="/"),
+  plotFile = paste(paste(outFile,"byGene.png",sep="_"), "png", sep=".")
+  ggsave(plotFile,
          height=2.5, width=outw, units="in", dpi=600)
   
-  endLog(outFile)
+  endLog(logFile)
   
   return(list(t1, t2, t3, t4, t5, t6, p,pg))
 }
@@ -473,18 +490,22 @@ wholeBrainAnalysisMixedEffects <- function(metric,
                                            edgePC=3, ts=12,
                                            exclNeg=FALSE,
                                            family=FALSE){
-  
-  if(weighted){
-    metric = paste(metric,"wt",sep="_")
-  }
-  
   # create output directory
   dir.create(outDir, showWarnings = FALSE)
   
   # define log output file
-  outFile = paste(outDir,
-                  paste(metric,"logFile.tex",sep="_"),
-                  sep="/")
+  if(weighted){
+    outFile = paste(outDir,
+                    paste(metric,"wt",sep="_"),
+                    sep="/")
+    
+  } else {
+    outFile = paste(outDir,
+                    paste(metric,sep="_"),
+                    sep="/")
+    
+  }
+  logFile = paste(outFile, "logFile.tex", sep="_")
   
   # import graph data
   dF <- importGraphData(metric, weighted, edgePC)
@@ -536,9 +557,9 @@ wholeBrainAnalysisMixedEffects <- function(metric,
   }
   
   
-  print(t1, file=outFile, append=TRUE)
-  print(t2, file=outFile, append=TRUE)
-  if(family){print(t3, file=outFile, append=TRUE)}
+  print(t1, file=logFile, append=TRUE)
+  print(t2, file=logFile, append=TRUE)
+  if(family){print(t3, file=logFile, append=TRUE)}
   
   # plot random effects
   dF.plot.site <- data.frame(site = row.names(mod.coef$site),
@@ -571,7 +592,7 @@ wholeBrainAnalysisMixedEffects <- function(metric,
                caption="Variance of random effects")
 
   print(t4,
-        file=outFile,
+        file=logFile,
         append=TRUE,
         include.rownames=FALSE)
   
@@ -584,7 +605,7 @@ wholeBrainAnalysisMixedEffects <- function(metric,
                caption=paste("ANOVA of linear mixed effects model for", metricName))
   
   print(t5,
-        file=outFile,
+        file=logFile,
         append=TRUE)
   
 
@@ -601,20 +622,25 @@ graphTimeComparison <- function(metric,
                                 h=30,w=45,s=4,ts=12,ps=4,
                                 exclNeg=TRUE,
                                 family=FALSE){
-  if(weighted){
-    metric = paste(metric,"wt",sep="_")
-  }
-  
   # create output directory
   dir.create(outDir, showWarnings = FALSE)
   
   # define log output file
-  outFile = paste(outDir,
-                  paste(metric,"logFile.tex",sep="_"),
-                  sep="/")
+  if(weighted){
+    outFile = paste(outDir,
+                    paste(metric,"wt",sep="_"),
+                    sep="/")
+    
+  } else {
+    outFile = paste(outDir,
+                    paste(metric,sep="_"),
+                    sep="/")
+    
+  }
+  logFile = paste(outFile, "logFile.tex", sep="_")
   
   # create log file
-  initiateLog(outFile, metricName)
+  initiateLog(logFile, metricName)
   
   ### function to plot and analyse the relationship between graph metrics and expected time to disease onset
   # import graph metric data
@@ -638,14 +664,6 @@ graphTimeComparison <- function(metric,
   dF <- merge(dF, dF.aoo, by="wbic")
   dF <- unique(dF) # remove duplicates that may have sneaked in
   
-  # if indicated exclude gene negative group
-  plotOutName = paste(metric,"png",sep=".")
-  
-  if(exclNeg){
-    dF <- dF[dF$GS!="gene negative",]
-    plotOutName = paste(paste(metric, "GenePos", sep=""),"png",sep=".")
-  }
-
   # simple linear 
   lm.all <- lm(values ~ aoo*GS, data=dF)
   
@@ -664,9 +682,15 @@ graphTimeComparison <- function(metric,
   p1 <- p1 + theme_bw() + theme(legend.key = element_rect(colour="#FFFFFF", fill = "#FFFFFF"))
   p1 <- p1 + theme(text=element_text(size=ts), plot.title=element_text(size=ts))
   
-  ggsave(paste(outDir,
-               plotOutName,
-               sep="/"),
+  # if indicated exclude gene negative group
+  plotOutName = paste(outFile,"png",sep=".")
+  
+  if(exclNeg){
+    dF <- dF[dF$GS!="gene negative",]
+    plotOutName = paste(paste(outFile, "GenePos", sep=""),"png",sep=".")
+  }
+  
+  ggsave(plotOutName,
          scale=s,
          dpi=600,
          height=h, width=w,
@@ -679,7 +703,7 @@ graphTimeComparison <- function(metric,
   
   print(t1,
         include.rownames=TRUE,
-        file=outFile,
+        file=logFile,
         append=TRUE)
   
   # comparison with null model
@@ -692,7 +716,7 @@ graphTimeComparison <- function(metric,
   
   print(t2,
         include.rownames=FALSE,
-        file=outFile,
+        file=logFile,
         append=TRUE)
   
   # now run linear mixed effects model model
@@ -737,7 +761,7 @@ graphTimeComparison <- function(metric,
 
   print(t3,
         include.rownames=TRUE,
-        file=outFile,
+        file=logFile,
         append=TRUE)
   
   t4 <- xtable(data.frame(StdDev = c(attributes(VarCorr(mod)[[1]])[["stddev"]],
@@ -750,7 +774,7 @@ graphTimeComparison <- function(metric,
   
   print(t4,
         include.rownames=TRUE,
-        file=outFile,
+        file=logFile,
         append=TRUE)
   
   # print the variance and standard deviation of the random effects
@@ -762,7 +786,7 @@ graphTimeComparison <- function(metric,
                caption="Variance of random effects")
   
   print(t5,
-        file=outFile,
+        file=logFile,
         append=TRUE,
         include.rownames=FALSE)
   
@@ -787,7 +811,7 @@ graphTimeComparison <- function(metric,
   
   print(t6,
         include.rownames=TRUE,
-        file=outFile,
+        file=logFile,
         append=TRUE)
   
   return(list(t1, t2, t3, t4, t5, t6, p1, p2, p3, p4))
@@ -804,20 +828,25 @@ graphTimeComparisonNL <- function(metric,
                                 edgePC=3,
                                 h=30,w=45,s=4,ts=12,ps=4,
                                 sink=TRUE){
-  if(weighted){
-    metric = paste(metric,"wt",sep="_")
-  }
-  
   # create output directory
   dir.create(outDir, showWarnings = FALSE)
   
   # define log output file
-  outFile = paste(outDir,
-                  paste(metric,"logFile.tex",sep="_"),
-                  sep="/")
+  if(weighted){
+    outFile = paste(outDir,
+                    paste(metric,"wt",sep="_"),
+                    sep="/")
+    
+  } else {
+    outFile = paste(outDir,
+                    paste(metric,sep="_"),
+                    sep="/")
+    
+  }
+  logFile = paste(outFile, "logFile.tex", sep="_")
   
   # create log file
-  initiateLog(outFile, metricName)
+  initiateLog(logFile, metricName)
   
   ### function to plot and analyse the relationship between graph metrics and expected time to disease onset
   # import graph metric data
@@ -842,11 +871,11 @@ graphTimeComparisonNL <- function(metric,
   dF <- unique(dF) # remove duplicates that may have sneaked in
   
   # now run non-linear mixed effects model with a quadratic term
-  nlOutFile = paste(outDir,
+  nloutFile = paste(outDir,
                     paste(metric,"NLlogFile.txt",sep="_"),
                     sep="/")
   if(sink){
-    sink(nlOutFile)
+    sink(nllogFile)
   }
   # firstly, plot the values to be able to estimate starting parameters
   if(is.null((startvec))){
@@ -913,9 +942,8 @@ graphTimeComparisonNL <- function(metric,
 #   print(paste("Saving",paste(outDir,
 #                        paste(paste(metric, "nonLinearEstimatesQuadratic",sep="_"),"png",sep="."),
 #                        sep="/")))
-  ggsave(paste(outDir,
-               paste(paste(metric, "nonLinearEstimatesQuadratic",sep="_"),"png",sep="."),
-               sep="/"),
+  plotFile = paste(paste(outFile, "nonLinearEstimatesQuadratic",sep="_"), "png", sep=".")
+  ggsave(plotFile,
          scale=s,
          dpi=600,
          height=h, width=w,
@@ -982,9 +1010,8 @@ graphTimeComparisonNL <- function(metric,
 #   print(paste("Saving",paste(outDir,
 #                              paste(paste(metric, "nonLinearEstimatesCubic",sep="_"),"png",sep="."),
 #                              sep="/")))
-  ggsave(paste(outDir,
-               paste(paste(metric, "nonLinearEstimatesCubic",sep="_"),"png",sep="."),
-               sep="/"),
+  plotFile = paste(paste(outFile, "nonLinearEstimatesCubic",sep="_"),"png",sep=".")
+  ggsave(plotFile,
          scale=s,
          dpi=600,
          height=h, width=w,
@@ -1006,12 +1033,12 @@ graphTimeComparisonNL <- function(metric,
                  digits = c(0,0,2,2,2,2,2,2,2),
                  display = c("s","d","fg","fg","fg","fg","d","fg","fg")),
           include.rownames=TRUE,
-          file=outFile,
+          file=logFile,
           append=TRUE)
   }
   
   # finalise log file and return dataframe
-  endLog(outFile)
+  endLog(logFile)
   return(list(list(pp=pp, pq=pq, pc=pc),
               qStartvec,     # starting values for quadratic non-linear regression
               cStartvec,     # starting values for cubic non-linear regression
@@ -1103,20 +1130,26 @@ breakpoint <- function(metric,
                        outDir="wholeBrainVsAOOResults",
                        weighted=FALSE,
                        ts=12){
+  # define log output file
   if(weighted){
-    metric = paste(metric,"wt",sep="_")
+    outFile = paste(outDir,
+                    paste(metric,"wt",sep="_"),
+                    sep="/")
+    
+  } else {
+    outFile = paste(outDir,
+                    paste(metric,sep="_"),
+                    sep="/")
+    
   }
+  
+  logFile = paste(outFile, "logFile.tex", sep="_")
   
   # create output directory
   dir.create(outDir, showWarnings = FALSE)
   
-  # define log output file
-  outFile = paste(outDir,
-                  paste(metric,"logFile.tex",sep="_"),
-                  sep="/")
-  
   # create log file
-  initiateLog(outFile, metricName)
+  initiateLog(logFile, metricName)
   
   ### function to plot and analyse the relationship between graph metrics and expected time to disease onset
   # import graph metric data
@@ -1195,20 +1228,26 @@ breakPointDiscontinuous <- function(metric,
                                     outDir="wholeBrainVsAOOResults",
                                     weighted=FALSE,
                                     ts=12){
+  # define log output file
   if(weighted){
-    metric = paste(metric,"wt",sep="_")
+    outFile = paste(outDir,
+                    paste(metric,"wt",sep="_"),
+                    sep="/")
+    
+  } else {
+    outFile = paste(outDir,
+                    paste(metric,sep="_"),
+                    sep="/")
+    
   }
+  
+  logFile = paste(outFile, "logFile.tex", sep="_")
   
   # create output directory
   dir.create(outDir, showWarnings = FALSE)
   
-  # define log output file
-  outFile = paste(outDir,
-                  paste(metric,"logFile.tex",sep="_"),
-                  sep="/")
-  
   # create log file
-  initiateLog(outFile, metricName)
+  initiateLog(logFile, metricName)
   
   ### function to plot and analyse the relationship between graph metrics and expected time to disease onset
   # import graph metric data
@@ -1253,7 +1292,7 @@ breakPointDiscontinuous <- function(metric,
 
   print(t1,
         include.rownames=TRUE,
-        file=outFile,
+        file=logFile,
         append=TRUE)
   
   t1 <- xtable(summary(piecewise),
@@ -1262,7 +1301,7 @@ breakPointDiscontinuous <- function(metric,
                display = c("s","fg","fg","fg","g"))
   print(t1,
         include.rownames=TRUE,
-        file=outFile,
+        file=logFile,
         append=TRUE)
   
   # compare with null model
@@ -1281,7 +1320,7 @@ breakPointDiscontinuous <- function(metric,
   
   print(t2,
         include.rownames=TRUE,
-        file=outFile,
+        file=logFile,
         append=TRUE)
   
   # plot breakpoint data
@@ -1306,9 +1345,8 @@ breakPointDiscontinuous <- function(metric,
   p <- p + theme_bw() + theme(legend.key = element_rect(colour="#FFFFFF", fill = "#FFFFFF"))
   p <- p + theme(text=element_text(size=ts), plot.title=element_text(size=ts))
   
-  ggsave(paste(outDir,
-               paste(metric,"DiscontBkpt.png",sep="_"),
-               sep="/"))
+  plotFile = paste(paste(outFile,"DiscontBkpt.png",sep="_"),"png",sep=".")
+  ggsave(plotFile)
   
   ### need to finish plot ###
   return(list(t1, t2 ,p))
@@ -1316,19 +1354,25 @@ breakPointDiscontinuous <- function(metric,
 
 countIt <- function(x,n){return(length(x[x==n]))}
 
-demographics <- function(demog, typeList, exclNeg=FALSE){
+demographics <- function(demog, typeList, sp=NA, exclNeg=FALSE){
   # import graph data
   dF <- importGraphData("geNorm", FALSE)
   if(exclNeg){
     dF <- dF[dF$GS!="gene negative",]
   }
   
+  if(is.data.frame(sp)){dF <- applySP(dF, sp)}
+  
   type=typeList[demog]
 
   # merge with demographic data
   dF.demog <- read.table("../genfi_Subjects_sjones_1_22_2015_17_47_47_restructure_summary.csv", sep="\t", header = TRUE)
   names(dF.demog)[4] <- "wbic"
-  dF <- merge(dF, dF.demog[,-which(names(dF.demog)=="GS")], by = c("wbic"))
+  dF.demog <- dF.demog[dF.demog$wbic[dF.demog$wbic %in% dF$wbic],]
+  dF <- merge(dF, dF.demog[,-which(names(dF.demog)=="GS")],
+              by = c("wbic"),
+              all.x=TRUE,
+              all.y=FALSE)
   names(dF)[which(names(dF)==demog)] <- "demog"
   
   # create summary table of demographic data
@@ -1484,4 +1528,47 @@ demographics <- function(demog, typeList, exclNeg=FALSE){
              )
     }
   }
+}
+
+scanSummaries <- function(scanField, scanTypeList, sp=NA, exclNeg=FALSE){
+  # import graph data
+  dF <- importGraphData("geNorm", FALSE)
+  if(exclNeg){
+    dF <- dF[dF$GS!="gene negative",]
+  }
+  
+  if(is.data.frame(sp)){dF <- applySP(dF, sp, spVal = 10)}
+  
+  type=scanTypeList[scanField]
+  
+  # merge with scanFieldraphic data
+  dF.scanField <- read.table("../genfi_Subjects_sjones_1_22_2015_17_47_47_restructure_summary.csv", sep="\t", header = TRUE)
+  names(dF.scanField)[4] <- "wbic"
+  dF.scanField <- dF.scanField[dF.scanField$scan_duration>100,] # exclude lines with subjects with only short scans
+  
+  dF <- merge(dF, dF.scanField[,-which(names(dF.scanField)=="GS")],
+              by = c("wbic"),
+              all.x=TRUE,
+              all.y=FALSE)
+  names(dF)[which(names(dF)==scanField)] <- "scanField"
+  
+  scanFieldSummary=c()
+  if(type=="continuous"){
+    scanFieldSummary <- fivenum(dF$scanField, na.rm = TRUE)
+    names(scanFieldSummary) <- c("min", "low.hinge", "median", "high.hinge", "max")
+    scanFieldSummary$mean = mean(dF$scanField, na.rm=TRUE)
+    for(i in c("categories", "n")){
+      scanFieldSummary[i] = NA
+    }
+  } else if(type=="category"){
+    for(i in c("min", "low.hinge", "median", "high.hinge", "max", "mean")){
+      scanFieldSummary[i] = NA
+    }
+    tSum <- table(dF$scanField)
+    names(tSum) <- sapply(names(tSum), function(x) strsplit(x, " ")[[1]][[1]])
+    
+    scanFieldSummary$categories = paste(names(tSum), collapse = "/")
+    scanFieldSummary$n = paste(tSum, collapse="/")
+  }
+  return(scanFieldSummary)
 }
