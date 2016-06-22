@@ -172,8 +172,8 @@ addSigBar <- function(p, pVal, d1, d2, xList, sig.value=0.05, excludeNegs=FALSE)
   return(p)
 }
 
-addSigBarGenes <- function(p, pVal, d1, d2, xList, ymax, ng, sig.value=0.05, excludeNegs=FALSE){
-  nLen=3
+addSigBarGenes <- function(p, pVal, d1, d2, xList, ymax, ng,
+                           nLen=3, sig.value=0.05, excludeNegs=FALSE){
   if(pVal < sig.value){
     ymin = ggplot_build(p)$panel$ranges[[1]]$y.range[1]
     ygap = ymax - ymin
@@ -190,9 +190,8 @@ addSigBarGenes <- function(p, pVal, d1, d2, xList, ymax, ng, sig.value=0.05, exc
     ymax = ymax + .15*ygap
     
     ypos = ymax - ygap*.05
-    xpos1 = xList[d1]/nLen + (ng-1) + 1/nLen - (xList[d1]-nLen-1)*.08
-    
-    xpos2 = xList[d2]/nLen + (ng-1) + 1/nLen - (xList[d2]-nLen-1)*.08
+    xpos1 = ng + (xList[d1]-(nLen/2)-0.5)*(1/(nLen+1))   #
+    xpos2 = ng + (xList[d2]-(nLen/2)-0.5)*(1/(nLen+1)) # - 1/nLen - (xList[d2]-nLen+1)*0.7   #
     
     p <- p + geom_segment(x=xpos1, xend=xpos2, y=ypos, yend=ypos, colour="black")
     p <- p + annotate("text", x=mean(c(xpos1, xpos2)), y=ypos, label=pVal.plot, colour="black", size=8)
@@ -207,7 +206,8 @@ wholeBrainAnalysis <- function(metric,
                                cols,
                                sp, weighted=TRUE,
                                outDir="wholeBrainResults",
-                               edgePC=3, ts=12,  # ts = text size
+                               edgePC=3,
+                               h=15,w=15,s=4,ts=12,ps=4,  # ts = text size
                                excludeNegs=FALSE){ # TRUE to exclude gene negative subjects
   # create output directory
   dir.create(outDir, showWarnings = FALSE)
@@ -284,16 +284,17 @@ wholeBrainAnalysis <- function(metric,
     
   }
   
-  print(xtable(dF.wb.summary[,-1],
-               caption=paste("Mean and standard deviations for",metricName,"values in individuals")),
-        include.rownames=FALSE,
-        file=logFile,
-        append=TRUE)
+#   print(xtable(dF.wb.summary[,-1],
+#                caption=paste("Mean and standard deviations for",metricName,"values in individuals")),
+#         include.rownames=FALSE,
+#         file=logFile,
+#         append=TRUE)
   
   if(excludeNegs){
     dF.wb <- dF.wb[dF.wb$GS!="gene negative",]
     dF.wb$GS <- as.factor(as.character(dF.wb$GS))
   }
+  
   # ANOVA of the differences
   mod <- lm(values~GS*gene, data=dF.wb)
   mod.aov <- anova(mod)
@@ -331,8 +332,6 @@ wholeBrainAnalysis <- function(metric,
   if(!excludeNegs){
     # t-test for affected vs non-affected (gene negative and gene positive)
     anTtest <- t.test(dF.wb[dF.wb$GS=="FTD","values"], dF.wb[dF.wb$GS!="FTD","values"])
-    
-    
     
     t4 <- xtable(data.frame("t"=fn(anTtest[["statistic"]]),
                             "p"=fn(anTtest[["p.value"]])),
@@ -389,11 +388,11 @@ wholeBrainAnalysis <- function(metric,
   dF.tResults <- data.frame()
   for(gene in levels(dF.wb$gene)){
     dF.temp <- dF.wb[dF.wb$gene==gene,]
-    pwTtests <- apply(pwGS, 2, function(x) dotTests(x,dF.temp))
-    pwTtests <- data.frame(gene=gene, matrix(unlist(pwTtests), nrow = length(pwTtests), byrow = TRUE))
-    names(pwTtests) <- c("gene", "comparison", "t", "p")
+    pwTtestsG <- apply(pwGS, 2, function(x) dotTests(x,dF.temp))
+    pwTtestsG <- data.frame(gene=gene, matrix(unlist(pwTtestsG), nrow = length(pwTtestsG), byrow = TRUE))
+    names(pwTtestsG) <- c("gene", "comparison", "t", "p")
     dF.tResults <- rbind(dF.tResults,
-                         pwTtests)
+                         pwTtestsG)
   }
   
   dF.tResults[,3] <- as.numeric(as.character(dF.tResults[,3]))
@@ -417,6 +416,7 @@ wholeBrainAnalysis <- function(metric,
   p <- ggplot(dF.wb, aes_string(x="GS", y="values", fill="GS"))
   p <- p + geom_boxplot()
   
+  # add significance bar
   xList = seq_along(levels(dF$GS))
   names(xList) = levels(dF$GS)
   for(n in seq(length(pwGS[1,]))){
@@ -438,9 +438,12 @@ wholeBrainAnalysis <- function(metric,
     outw = 3
   }
   
-  plotFile = paste(paste(outFile,"allgroups.png",sep="_"), "png", sep=".")
+  plotFile = paste(paste(outFile,"allgroups",sep="_"), "png", sep=".")
   ggsave(plotFile,
-         height=2.5, width=outw, units="in", dpi=600)
+         scale=s,
+         dpi=600,
+         height=h, width=w,
+         units="mm")
   
   # now do a plot for group differences for separate genes
   # p <- ggplot(dF.stacked.plot, aes_string(x="unique", y="valuesMean", middle="valuesMean", group="unique", fill="gene", upper="upper", lower="lower"))
@@ -462,7 +465,7 @@ wholeBrainAnalysis <- function(metric,
       pVal = as.numeric(as.character(dF.tResults[dF.tResults$gene==gene,][n, "p"]))
       d1 = pwGS[1,n]
       d2 = pwGS[2,n]
-      pL <- addSigBarGenes(pg, pVal, d1, d2, xList, ytop, ng, excludeNegs=excludeNegs)
+      pL <- addSigBarGenes(pg, pVal, d1, d2, xList, ytop, ng, nLen=length(levels(dF.wb$GS)), excludeNegs=excludeNegs)
       pg = pL[["p"]]
       ytop = pL[["ymax"]]
     }
@@ -470,12 +473,15 @@ wholeBrainAnalysis <- function(metric,
   }
   pg <- pg + scale_y_continuous(limits=c(ymin, ytop.max))
   pg <- pg + theme_bw()
-  pg <- pg + labs(y=metricName) + theme(axis.title.x=element_blank())
+  pg <- pg + theme(axis.title.x=element_blank(), axis.title.y=element_blank())  #
   pg <- pg + theme(text=element_text(size=ts))
   
-  plotFile = paste(paste(outFile,"byGene.png",sep="_"), "png", sep=".")
+  plotFile = paste(paste(outFile,"byGene",sep="_"), "png", sep=".")
   ggsave(plotFile,
-         height=2.5, width=outw, units="in", dpi=600)
+         scale=s,
+         dpi=600,
+         height=h, width=w*2,
+         units="mm")
   
   endLog(logFile)
   
@@ -490,6 +496,7 @@ wholeBrainAnalysisMixedEffects <- function(metric,
                                            edgePC=3, ts=12,
                                            exclNeg=FALSE,
                                            family=FALSE){
+  
   # create output directory
   dir.create(outDir, showWarnings = FALSE)
   
@@ -503,13 +510,12 @@ wholeBrainAnalysisMixedEffects <- function(metric,
     outFile = paste(outDir,
                     paste(metric,sep="_"),
                     sep="/")
-    
   }
   logFile = paste(outFile, "logFile.tex", sep="_")
   
   # import graph data
   dF <- importGraphData(metric, weighted, edgePC)
-  
+
   # if indicated exclude gene negative group
   if(exclNeg){
     dF <- dF[dF$GS!="gene negative",]
@@ -556,7 +562,6 @@ wholeBrainAnalysisMixedEffects <- function(metric,
     t3 = NA
   }
   
-  
   print(t1, file=logFile, append=TRUE)
   print(t2, file=logFile, append=TRUE)
   if(family){print(t3, file=logFile, append=TRUE)}
@@ -582,7 +587,6 @@ wholeBrainAnalysisMixedEffects <- function(metric,
     p3 = NA
   }
   
-
   # print variances
   vc <- VarCorr(mod)
 
@@ -607,7 +611,6 @@ wholeBrainAnalysisMixedEffects <- function(metric,
   print(t5,
         file=logFile,
         append=TRUE)
-  
 
   return(list(t1, t2, t3, t4, t5, p1, p2, p3))
 }
@@ -664,33 +667,67 @@ graphTimeComparison <- function(metric,
   dF <- merge(dF, dF.aoo, by="wbic")
   dF <- unique(dF) # remove duplicates that may have sneaked in
   
+  if(exclNeg){
+    dF <- dF[dF$GS!="gene negative",]
+    outFile = paste(outFile, "GenePos", sep="")
+  } else {
+    dF$GS <- sapply(dF$GS, function(x) if(x!="gene negative"){return("gene carriers")} else {return("gene negative")})
+  }
+  dF$GS <- as.factor(as.character(dF$GS))
+
+  # simple linear with all groups combined
+  lm.simpLM <- lm(values~aoo, data=dF)
+  
   # simple linear 
   lm.all <- lm(values ~ aoo*GS, data=dF)
   
   # null model - assumes no interaction between onset and gene status
   lm.null <- lm(values ~ aoo+GS, data=dF)
-
+  
   # plot linear model NOT MIXED EFFECTS
   dF.plot <- dF
-  
+
   p <- ggplot(dF.plot, aes_string(x="aoo", y="values", colour="GS", group="GS"))
   p <- p + geom_point(size=ps)
-  p1 <- p + geom_smooth(method="lm")
+  p <- p + scale_x_continuous(breaks=seq(-100,100,10))
   colList = unlist(cols[levels(dF.plot$GS)])
+
+  # plot simple linear model with all groups combined
+  p5 <- p + scale_colour_manual(name="Group",values=as.vector(colList))
+  int <- lm.simpLM[["coefficients"]][[1]]
+  slope <- lm.simpLM[["coefficients"]][[2]]
+  p5 <- p5 + geom_abline(intercept=int, slope=slope)
+  
+  # from line below: paste(metricName, "linear regression", sep="\n")
+  p5 <- p5 + labs(title="", y=metricName, x="Estimated age of onset") + theme(axis.title.x=element_blank(), legend.key=element_rect(fill="white", colour="white"))
+  p5 <- p5 + theme_bw() + theme(legend.key = element_rect(colour="#FFFFFF", fill = "#FFFFFF"))
+  p5 <- p5 + theme(text=element_text(size=ts), plot.title=element_text(size=ts))
+  
+  plotOutName = paste(paste(outFile, "simpLM", sep="_"),"png",sep=".")
+  
+  ggsave(plotOutName,
+         plot=p5,
+         scale=s,
+         dpi=600,
+         height=h, width=w,
+         units="mm")
+  
+  t7 <- xtable(summary(lm.simpLM),
+               caption=paste("summary of linear model combining all groups for", metricName),
+               digits=c(0,2,2,2,2),
+               display=c("s","fg","fg","fg","g"))
+  
+  p1 <- p + geom_smooth(method="lm")
   p1 <- p1 + scale_colour_manual(name="Group",values=as.vector(colList))
-  p1 <- p1 + labs(title=paste(metricName, "linear regression", sep="\n"), y=metricName, x="Estimated age of onset") + theme(axis.title.x=element_blank(), legend.key=element_rect(fill="white", colour="white"))
+  # from line below: paste(metricName, "linear regression", sep="\n")
+  p1 <- p1 + labs(title="", y=metricName, x="Estimated age of onset") + theme(axis.title.x=element_blank(), legend.key=element_rect(fill="white", colour="white"))
   p1 <- p1 + theme_bw() + theme(legend.key = element_rect(colour="#FFFFFF", fill = "#FFFFFF"))
   p1 <- p1 + theme(text=element_text(size=ts), plot.title=element_text(size=ts))
   
-  # if indicated exclude gene negative group
   plotOutName = paste(outFile,"png",sep=".")
   
-  if(exclNeg){
-    dF <- dF[dF$GS!="gene negative",]
-    plotOutName = paste(paste(outFile, "GenePos", sep=""),"png",sep=".")
-  }
-  
   ggsave(plotOutName,
+         plot=p1,
          scale=s,
          dpi=600,
          height=h, width=w,
@@ -814,7 +851,7 @@ graphTimeComparison <- function(metric,
         file=logFile,
         append=TRUE)
   
-  return(list(t1, t2, t3, t4, t5, t6, p1, p2, p3, p4))
+  return(list(t1, t2, t3, t4, t5, t6, t7, p1, p2, p3, p4, p5))
 }
   
 graphTimeComparisonNL <- function(metric,
@@ -1129,7 +1166,7 @@ breakpoint <- function(metric,
                        edgePC=3,
                        outDir="wholeBrainVsAOOResults",
                        weighted=FALSE,
-                       ts=12){
+                       ts=12,ps=4){
   # define log output file
   if(weighted){
     outFile = paste(outDir,
@@ -1197,7 +1234,7 @@ breakpoint <- function(metric,
   # plot breakpoint data
   y = br$psi[[2]] * br$coefficients[[2]] + br$coefficients[[1]] # get the y value of the breakpoint
   p <- ggplot(dF, aes_string(x="aoo", y="values", colour="GS"))
-  p <- p + geom_point()
+  p <- p + geom_point(size=ps)
   p <- p + geom_segment(x=min(dF$aoo),
                         xend=br$psi[[2]],
                         y=min(dF$aoo)*br$coefficients[[2]]+br$coefficients[[1]],
@@ -1227,7 +1264,8 @@ breakPointDiscontinuous <- function(metric,
                                     edgePC=3,
                                     outDir="wholeBrainVsAOOResults",
                                     weighted=FALSE,
-                                    ts=12){
+                                    exclNeg=FALSE,
+                                    h=30,w=45,s=4,ts=12,ps=4){
   # define log output file
   if(weighted){
     outFile = paste(outDir,
@@ -1253,15 +1291,16 @@ breakPointDiscontinuous <- function(metric,
   # import graph metric data
   dF <- importGraphData(metric, weighted, edgePC)
   
-  # filter out gene negative subjects
-  dF <- dF[dF$GS!="gene negative",]
-  
   # filter by spike percentage
   dF <- applySP(dF, sp)
   
   # stack the data and take mean if a nodewise measure
+  if(weighted){
+    metric = paste(metric, "wt", sep="_")
+  }
+  
   dF <- stackIt(dF, metric) # changes the name of the metric to 'values'
-
+  
   # get age of onset data
   genfiData <- read.table("/home/tim/GENFI/genfi_Subjects_sjones_1_22_2015_17_47_47_restructure_summary.csv",
                           sep="\t",
@@ -1277,6 +1316,15 @@ breakPointDiscontinuous <- function(metric,
   # make small adjustment for a set of twins in family 172
   dup <- which(duplicated(dF$aoo))
   dF[dup,"aoo"] <- dF[dup,"aoo"] + 0.001
+  
+  # filter out gene negative subjects
+  if(exclNeg==FALSE){
+    dFgn <- dF[dF$GS=="gene negative",]
+    outFile = paste(outFile, "GenePos", sep="")
+  }
+  
+  dF <- dF[dF$GS!="gene negative",]
+  dF$GS <- factor(as.character(dF$GS), levels=c("gene carriers", "FTD"))
   
   #   # filter out affected subjects less than t=0 and gene positive greater than t=0
   #   dF <- rbind(dF[dF$GS=="FTD" && dF$aoo>=0,],
@@ -1312,7 +1360,7 @@ breakPointDiscontinuous <- function(metric,
                data=dF)
   
   modComparison <- anova(piecewise,nulMod)
-
+  
   t2 <- xtable(modComparison,
                caption = "ANOVA between model and null model to assess whether the segmented model fits better",
                digits = c(0,0,2,2,2,2,2),
@@ -1325,28 +1373,68 @@ breakPointDiscontinuous <- function(metric,
   
   # plot breakpoint data
   y <- piecewise$coefficients[[1]] # get the y value of the piecewiseeakpoint
-  p <- ggplot(dF, aes_string(x="aoo", y="values", colour="GS"))
-  p <- p + geom_point()
+  p <- ggplot(dF, aes_string(x="aoo", y="values"))
+  if(exclNeg==FALSE){
+    gnlm <- lm(values ~ aoo, data=dFgn)
+    int <- gnlm[["coefficients"]][[1]]
+    slope <- gnlm[["coefficients"]][[2]]
+    
+    p <- p + geom_segment(x=min(dFgn$aoo),
+                          xend=max(dFgn$aoo),
+                          y=min(dF$aoo)*gnlm$coefficients[[2]] + gnlm$coefficients[[1]],
+                          yend= max(dF$aoo)*gnlm$coefficients[[2]] + gnlm$coefficients[[1]],
+                          size=1.5,
+                          colour="#E69F00",
+                          linetype="longdash")
+    
+    # set x axis limits
+    if(min(dF$aoo) < min(dFgn$aoo)){
+      xmin = min(dF$aoo)
+    } else {
+      xmin = min(dFgn$aoo)
+    }
+    
+    if(max(dF$aoo) > max(dFgn$aoo)){
+      xmax = max(dF$aoo)
+    } else {
+      xmax = max(dFgn$aoo)
+    }
+    p <- p + scale_x_continuous(breaks = seq(-100,100,10), limits=c(xmin,xmax))
+  } else {
+    p <- p + scale_x_continuous(breaks = seq(-100,100,10))
+  }
+  
+  p <- p + geom_point(size=ps, shape=16, aes_string(colour="GS"))
   p <- p + geom_segment(x=min(dF$aoo),
                         xend=0.,
                         y=min(dF$aoo)*(piecewise$coefficients[[2]]+piecewise$coefficients[[5]])+y+piecewise$coefficients[[3]],
                         yend=y+piecewise$coefficients[[3]],
+                        size=1.5,
                         colour="black")
   
   p <- p + geom_segment(x=0.,
                         xend=max(dF$aoo),
                         y=y,
                         yend=max(dF$aoo)*piecewise$coefficients[[2]]+piecewise$coefficients[[1]],
+                        size=1.5,
                         colour="black")
   
   colList = unlist(cols[levels(dF$GS)])
-  p <- p + scale_colour_manual(name="Group",values=as.vector(colList))
-  p <- p + labs(title=paste(metricName, "discontinuous breakpoint analysis", sep="\n"), y=metricName, x="Estimated age of onset") + theme(axis.title.x=element_blank(), legend.key=element_rect(fill="white", colour="white"))
+
+  # from line below: title=paste(metricName, "discontinuous breakpoint analysis", sep="\n"), 
+  p <- p + labs(title="", y=metricName, x="Years from estimated age of onset") + theme(axis.title.x=element_blank(), legend.key=element_rect(fill="white", colour="white"))
   p <- p + theme_bw() + theme(legend.key = element_rect(colour="#FFFFFF", fill = "#FFFFFF"))
+  # p <- p + scale_fill_manual(name="Group",values=as.vector(colList))
+  p <- p + scale_colour_manual(name="Group", values=as.vector(colList))
   p <- p + theme(text=element_text(size=ts), plot.title=element_text(size=ts))
   
-  plotFile = paste(paste(outFile,"DiscontBkpt.png",sep="_"),"png",sep=".")
-  ggsave(plotFile)
+  plotFile = paste(paste(outFile,"DiscontBkpt",sep="_"),"png",sep=".")
+  ggsave(plotFile,
+         plot=p,
+         scale=s,
+         dpi=600,
+         height=h, width=w,
+         units="mm")
   
   ### need to finish plot ###
   return(list(t1, t2 ,p))
