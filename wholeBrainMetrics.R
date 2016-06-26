@@ -7,7 +7,7 @@ library(ggplot2)
 library(xtable)
 library(car)
 library(xlsx)
-library(lme4)
+library(lmerTest)
 library(segmented)
 
 genfiDir = "/home/tim/GENFI/GENFI_camgrid_20150525/"
@@ -29,14 +29,13 @@ fn <- function(x,a=1,b=2){
   }
 }
 
-importGraphData <- function(metric, weighted, edgePC=3){
+importGraphData <- function(metric, weighted, edgePC=3, Age=TRUE){
   # define input file
   if(weighted){
     inFile = paste("d2",metric,"wt","local",sep="_")
   } else {
     inFile = paste("d2",metric,"local",sep="_")
   }
-  
   
   # import data
   dF = read.table(paste(genfiDir,inFile, sep="/"), header = TRUE, na.strings = "NA")
@@ -50,6 +49,19 @@ importGraphData <- function(metric, weighted, edgePC=3){
   dF$GS = as.factor(dF$GS)
   dF$GS = revalue(dF$GS, c("0" = "gene negative", "1"="gene carriers", "2"="FTD"))
   dF$site = as.factor(dF$site)
+  
+  if(Age){
+    # add age
+    dF.demog <- read.table("../genfi_Subjects_sjones_1_22_2015_17_47_47_restructure_summary.csv", sep="\t", header = TRUE)
+    names(dF.demog)[4] <- "wbic"
+    
+    #   dF.demog <- dF.demog[dF.demog$wbic[dF.demog$wbic %in% dF$wbic],]
+    dF <- merge(dF, dF.demog[,c(4,which(names(dF.demog)=="Age"))],
+                by = c("wbic"),
+                all.x=TRUE,
+                all.y=FALSE)
+    dF <- unique(dF)
+  }
   
   # return dataframe with graph metrics
   return(dF)
@@ -82,9 +94,9 @@ stackIt <- function(dF, metric){
   if(length(nodeNames)>0){
     # Take the mean values of
     dF.stacked = stack(dF[,nodeNames])
-    dF.stacked = data.frame(dF.stacked, GS=dF$GS, gene=dF$gene, wbic=dF$wbic, site=dF$site, Family=dF$Family)
+    dF.stacked = data.frame(dF.stacked, GS=dF$GS, gene=dF$gene, wbic=dF$wbic, site=dF$site, Family=dF$Family, Age=dF$Age)
     
-    dF.wb = ddply(dF.stacked, .(gene, wbic, GS, site, Family), summarise,
+    dF.wb = ddply(dF.stacked, .(gene, wbic, GS, site, Family, Age), summarise,
                   values = mean(values, na.rm = TRUE)
     )
   } else {
@@ -516,11 +528,6 @@ wholeBrainAnalysisMixedEffects <- function(metric,
   # import graph data
   dF <- importGraphData(metric, weighted, edgePC)
 
-  # if indicated exclude gene negative group
-  if(exclNeg){
-    dF <- dF[dF$GS!="gene negative",]
-  }
-  
   # apply spike percentage threshold
   dF <- applySP(dF, sp)
   
@@ -528,14 +535,23 @@ wholeBrainAnalysisMixedEffects <- function(metric,
   
   # stack data and take the mean if it is a node-wise measures
   dF.wb <- stackIt(dF, metric)
+  
+  # Set contrasts if control group are to be excluded
+  # NB this retains the control group in the estimation of the age effect and as a null regressor
+  if(exclNeg){
+    cMat <- matrix(c(0,-1,1), nrow = 3)
+    rownames(cMat) <- levels(dF.wb$GS)
+    colnames(cMat) <- c("carriersVsFTD")
+    attr(dF.wb$GS, "contrasts") = cMat
+  }
 
   # ANOVA of the differences
   if(family){
-    mod <- lmer(values ~ GS + (1 | gene) + (1 | site) + (1 | Family),
+    mod <- lmer(values ~ GS + Age + (1 | gene) + (1 | site) + (1 | Family),
                 data=dF.wb,
                 REML=FALSE)
   } else {
-    mod <- lmer(values ~ GS + (1 | gene) + (1 | site),
+    mod <- lmer(values ~ GS + Age + (1 | gene) + (1 | site),
                 data=dF.wb,
                 REML=FALSE)
   }
@@ -600,13 +616,18 @@ wholeBrainAnalysisMixedEffects <- function(metric,
         append=TRUE,
         include.rownames=FALSE)
   
-  # Type II ANOVA
-  mod.avo <- Anova(mod, type="II")
+#   # Type II ANOVA
+#   mod.avo <- Anova(mod, type="II")
+#   
+#   t5 <- xtable(mod.avo,
+#                digits=c(0,1,1,2),
+#                display=c("s","f","d","fg"),
+#                caption=paste("ANOVA of linear mixed effects model for", metricName))
+    t5 <- xtable(summary(mod)[[10]],
+                 digits=c(0,2,2,1,2,2),
+                 display=c("s","fg","f","f","f","g"),
+                 caption=paste("Satterthwaite estimates of pvalues of linear mixed effects model for", metricName))
   
-  t5 <- xtable(mod.avo,
-               digits=c(0,1,1,2),
-               display=c("s","f","d","fg"),
-               caption=paste("ANOVA of linear mixed effects model for", metricName))
   
   print(t5,
         file=logFile,
@@ -793,8 +814,8 @@ graphTimeComparison <- function(metric,
   
   t3 <- xtable(summary(mod)[["coefficients"]],
                caption="Linear mixed effects model, fixed effects",
-               digits=c(0,2,2,2),
-               display=c("s","fg","fg","fg"))
+               digits=c(0,2,2,2,2,2),
+               display=c("s","fg","fg","fg","fg","fg"))
 
   print(t3,
         include.rownames=TRUE,
@@ -830,11 +851,11 @@ graphTimeComparison <- function(metric,
   # null model
   # this assumes there is no interaction between the gene status and age of onset
   if(family){
-    nulMod <- lmer(values ~ aoo + GS + (1 | gene) + (1 | site) + (1 | Family),
+    nulMod <- lmer(values ~ aoo + GS + Age + (1 | gene) + (1 | site) + (1 | Family),
                    data=dF,
                    REML=FALSE)
   } else {
-    nulMod <- lmer(values ~ aoo + GS + (1 | gene) + (1 | site),
+    nulMod <- lmer(values ~ aoo + GS + Age + (1 | gene) + (1 | site),
                    data=dF,
                    REML=FALSE)
   }
@@ -1444,7 +1465,7 @@ countIt <- function(x,n){return(length(x[x==n]))}
 
 demographics <- function(demog, typeList, sp=NA, exclNeg=FALSE){
   # import graph data
-  dF <- importGraphData("geNorm", FALSE)
+  dF <- importGraphData("geNorm", FALSE, Age=FALSE)
   if(exclNeg){
     dF <- dF[dF$GS!="gene negative",]
   }
