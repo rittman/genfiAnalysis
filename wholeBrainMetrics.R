@@ -688,13 +688,20 @@ graphTimeComparison <- function(metric,
   dF <- merge(dF, dF.aoo, by="wbic")
   dF <- unique(dF) # remove duplicates that may have sneaked in
   
+#   if(exclNeg){
+#     dF <- dF[dF$GS!="gene negative",]
+#     outFile = paste(outFile, "GenePos", sep="")
+#   } else {
+#     dF$GS <- sapply(dF$GS, function(x) if(x!="gene negative"){return("gene carriers")} else {return("gene negative")})
+#   }
+#   dF$GS <- as.factor(as.character(dF$GS))
+  
   if(exclNeg){
-    dF <- dF[dF$GS!="gene negative",]
-    outFile = paste(outFile, "GenePos", sep="")
-  } else {
-    dF$GS <- sapply(dF$GS, function(x) if(x!="gene negative"){return("gene carriers")} else {return("gene negative")})
+    cMat <- matrix(c(0,-1,1), nrow = 3)
+    rownames(cMat) <- levels(dF$GS)
+    colnames(cMat) <- c("carriersVsFTD")
+    attr(dF$GS, "contrasts") = cMat
   }
-  dF$GS <- as.factor(as.character(dF$GS))
 
   # simple linear with all groups combined
   lm.simpLM <- lm(values~aoo, data=dF)
@@ -872,7 +879,14 @@ graphTimeComparison <- function(metric,
         file=logFile,
         append=TRUE)
   
-  return(list(t1, t2, t3, t4, t5, t6, t7, p1, p2, p3, p4, p5))
+  # fixed effects
+  t8 <- xtable(summary(mod)[[10]],
+                    digits=c(0,2,2,1,2,2),
+                    display=c("s","fg","f","f","f","g"),
+                    caption=paste("Satterthwaite estimates of pvalues of linear mixed effects model for", metricName))
+  
+  
+  return(list(t1, t2, t3, t4, t5, t6, t7, t8, p1, p2, p3, p4, p5))
 }
   
 graphTimeComparisonNL <- function(metric,
