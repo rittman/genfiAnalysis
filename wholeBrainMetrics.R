@@ -688,21 +688,14 @@ graphTimeComparison <- function(metric,
   dF <- merge(dF, dF.aoo, by="wbic")
   dF <- unique(dF) # remove duplicates that may have sneaked in
   
-#   if(exclNeg){
-#     dF <- dF[dF$GS!="gene negative",]
-#     outFile = paste(outFile, "GenePos", sep="")
-#   } else {
-#     dF$GS <- sapply(dF$GS, function(x) if(x!="gene negative"){return("gene carriers")} else {return("gene negative")})
-#   }
-#   dF$GS <- as.factor(as.character(dF$GS))
-  
   if(exclNeg){
-    cMat <- matrix(c(0,-1,1), nrow = 3)
-    rownames(cMat) <- levels(dF$GS)
-    colnames(cMat) <- c("carriersVsFTD")
-    attr(dF$GS, "contrasts") = cMat
-  }
-
+    # dF <- dF[dF$GS!="gene negative",]
+    outFile = paste(outFile, "GenePos", sep="")
+  } #else {
+#     dF$GS <- sapply(dF$GS, function(x) if(x!="gene negative"){return("gene carriers")} else {return("gene negative")})
+#  }
+  # dF$GS <- as.factor(as.character(dF$GS))
+  
   # simple linear with all groups combined
   lm.simpLM <- lm(values~aoo, data=dF)
   
@@ -716,7 +709,7 @@ graphTimeComparison <- function(metric,
   dF.plot <- dF
 
   p <- ggplot(dF.plot, aes_string(x="aoo", y="values", colour="GS", group="GS"))
-  p <- p + geom_point(size=ps)
+  # p <- p + geom_point(size=ps)
   p <- p + scale_x_continuous(breaks=seq(-100,100,10))
   colList = unlist(cols[levels(dF.plot$GS)])
 
@@ -730,9 +723,10 @@ graphTimeComparison <- function(metric,
   p5 <- p5 + labs(title="", y=metricName, x="Estimated age of onset") + theme(axis.title.x=element_blank(), legend.key=element_rect(fill="white", colour="white"))
   p5 <- p5 + theme_bw() + theme(legend.key = element_rect(colour="#FFFFFF", fill = "#FFFFFF"))
   p5 <- p5 + theme(text=element_text(size=ts), plot.title=element_text(size=ts))
-  
+
   plotOutName = paste(paste(outFile, "simpLM", sep="_"),"png",sep=".")
-  
+
+  print("Saving p5")
   ggsave(plotOutName,
          plot=p5,
          scale=s,
@@ -752,8 +746,9 @@ graphTimeComparison <- function(metric,
   p1 <- p1 + theme_bw() + theme(legend.key = element_rect(colour="#FFFFFF", fill = "#FFFFFF"))
   p1 <- p1 + theme(text=element_text(size=ts), plot.title=element_text(size=ts))
   
+  print("Saving p1")
   plotOutName = paste(outFile,"png",sep=".")
-  
+
   ggsave(plotOutName,
          plot=p1,
          scale=s,
@@ -786,6 +781,13 @@ graphTimeComparison <- function(metric,
   
   # now run linear mixed effects model model
   # run model
+  if(exclNeg){
+    cMat <- matrix(c(0,-1,1), nrow = 3)
+    rownames(cMat) <- levels(dF$GS)
+    colnames(cMat) <- c("carriersVsFTD")
+    attr(dF$GS, "contrasts") = cMat
+  }
+  
   if(family){
     mod <- lmer(values ~ aoo * GS + (1 | gene) + (1 | site) + (1 | Family),
                 data=dF,
@@ -885,8 +887,114 @@ graphTimeComparison <- function(metric,
                     display=c("s","fg","f","f","f","g"),
                     caption=paste("Satterthwaite estimates of pvalues of linear mixed effects model for", metricName))
   
+  # now run the mixed effects model comparing gene negative with gene positive group
+  cMat <- matrix(c(0,1,1), nrow = 3)
+  rownames(cMat) <- levels(dF$GS)
+  colnames(cMat) <- c("geneNegVsGenePos")
+  attr(dF$GS, "contrasts") = cMat
   
-  return(list(t1, t2, t3, t4, t5, t6, t7, t8, p1, p2, p3, p4, p5))
+  if(family){
+    mod <- lmer(values ~ aoo * GS + (1 | gene) + (1 | site) + (1 | Family),
+                data=dF,
+                REML=FALSE)
+  } else {
+    mod <- lmer(values ~ aoo * GS + (1 | gene) + (1 | site),
+                data=dF,
+                REML=FALSE)
+  }
+  
+  
+  # plot random effects
+  mod.coef <- ranef(mod)
+  dF.plot.site <- data.frame(site = row.names(mod.coef$site),
+                             effect = mod.coef$site[[1]])
+  p6 <- ggplot(dF.plot.site, aes_string(x="site",y="effect"))
+  p6 <- p6 + geom_bar(stat="identity") + theme_bw() + ggtitle("Effect size of scan site")
+  
+  dF.plot.gene <- data.frame(gene = row.names(mod.coef$gene),
+                             effect = mod.coef$gene[[1]])
+  p7 <- ggplot(dF.plot.gene, aes_string(x="gene",y="effect"))
+  p7 <- p7 + geom_bar(stat="identity") + theme_bw() + ggtitle("Effect size of gene")
+  
+  if(family){
+    dF.plot.Family <- data.frame(Family = row.names(mod.coef$Family),
+                                 effect = mod.coef$Family[[1]])
+    p8 <- ggplot(dF.plot.Family, aes_string(x="Family",y="effect"))
+    p8 <- p8 + geom_bar(stat="identity") + theme_bw() + ggtitle("Effect size of family")
+    p8 <- p8 + theme(axis.text.x=element_blank())
+  } else {
+    p8 = NA
+  }
+  
+  t9 <- xtable(summary(mod)[["coefficients"]],
+               caption="Linear mixed effects model, fixed effects",
+               digits=c(0,2,2,2,2,2),
+               display=c("s","fg","fg","fg","fg","fg"))
+  
+  print(t9,
+        include.rownames=TRUE,
+        file=logFile,
+        append=TRUE)
+  
+  t10 <- xtable(data.frame(StdDev = c(attributes(VarCorr(mod)[[1]])[["stddev"]],
+                                     attributes(VarCorr(mod)[[2]])[["stddev"]],
+                                     attributes(VarCorr(mod))[["sc"]]),
+                          row.names = c("Family", "Site", "Residual")),                          
+               caption="Linear mixed effects model, random effects",
+               digits=c(0,2),
+               display=c("s","fg"))
+  
+  print(t10,
+        include.rownames=TRUE,
+        file=logFile,
+        append=TRUE)
+  
+  # print the variance and standard deviation of the random effects
+  vc <- VarCorr(mod)
+  
+  t11 <- xtable(data.frame(vc),
+               display=c("s","s","s","s","g","fg"),
+               digits=c(0,0,0,0,2,2),
+               caption="Variance of random effects")
+  
+  print(t11,
+        file=logFile,
+        append=TRUE,
+        include.rownames=FALSE)
+  
+  # null model
+  # this assumes there is no interaction between the gene status and age of onset
+  if(family){
+    nulMod <- lmer(values ~ aoo + GS + Age + (1 | gene) + (1 | site) + (1 | Family),
+                   data=dF,
+                   REML=FALSE)
+  } else {
+    nulMod <- lmer(values ~ aoo + GS + Age + (1 | gene) + (1 | site),
+                   data=dF,
+                   REML=FALSE)
+  }
+  
+  modComparison <- anova(mod,nulMod)
+  
+  t12 <- xtable(modComparison,
+               caption = "Assessment of whether there is a difference between slopes of gene positive and gene affected groups by comparing models including and excluding and interaction between age at onset and gene status",
+               digits = c(0,0,2,2,2,2,2,2,2),
+               display = c("s","d","fg","fg","fg","fg","d","fg","fg"))
+  
+  print(t12,
+        include.rownames=TRUE,
+        file=logFile,
+        append=TRUE)
+  
+  # fixed effects
+  t13 <- xtable(summary(mod)[[10]],
+               digits=c(0,2,2,1,2,2),
+               display=c("s","fg","f","f","f","g"),
+               caption=paste("Satterthwaite estimates of pvalues of linear mixed effects model for", metricName))
+  
+  
+  return(list(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12,
+              p1, p2, p3, p4, p5, p6, p7, p8))
 }
   
 graphTimeComparisonNL <- function(metric,
@@ -966,7 +1074,7 @@ graphTimeComparisonNL <- function(metric,
       colList = unlist(cols[levels(dF.plot$GS)])
       p.temp <- p.temp + scale_colour_manual(name="Group",values=as.vector(colList))
       dF.temp <- data.frame(x=dF$aoo, y=SSquadFun(dF$aoo, aq=aq, bq=bq, cq=cq), GS="Start estimates")
-      p.temp <- p.temp + geom_point(data=dF.temp, aes_string(x="x", y="y"))
+      # p.temp <- p.temp + geom_point(data=dF.temp, aes_string(x="x", y="y"))
       print(p.temp)
       affirm = readline(prompt = "Are you happy with this?(y/n)")
     }
@@ -997,7 +1105,7 @@ graphTimeComparisonNL <- function(metric,
   # plot estimated values
   dF.plot <- dF
   p <- ggplot(dF.plot, aes_string(x="aoo", y="values", colour="GS", group="GS"))
-  p <- p + geom_point(size=ps)
+  # p <- p + geom_point(size=ps)
   
   x = seq(-45,25,by=1)
   dF.nlmq <- data.frame(x=x, y=SSquadFun(x, nlmq@beta[[1]], nlmq@beta[[2]], nlmq@beta[[3]]), GS="estimates")
@@ -1035,7 +1143,7 @@ graphTimeComparisonNL <- function(metric,
       
       # dF.temp <- data.frame(x=dF$aoo, y=SSasymp(dF$aoo, Asym, R0, lrc), GS="Start estimates")
       dF.temp <- data.frame(x=dF$aoo, y=SScubicFun(dF$aoo, ac=ac, bc=bc, cc=cc, dc=dc), GS="Start estimates")
-      p.temp <- pp + geom_point(data=dF.temp, aes_string(x="x", y="y"))
+      # p.temp <- pp + geom_point(data=dF.temp, aes_string(x="x", y="y"))
       print(p.temp)
       affirm = readline(prompt = "Are you happy with this?(y/n)")
     }
@@ -1268,19 +1376,27 @@ breakpoint <- function(metric,
   
   # plot breakpoint data
   y = br$psi[[2]] * br$coefficients[[2]] + br$coefficients[[1]] # get the y value of the breakpoint
+  yMax = max(max(dF$aoo)*br$coefficients[[3]]+br$coefficients[[1]])
+  yMin = min(dF$aoo)*br$coefficients[[2]]+br$coefficients[[1]]
   p <- ggplot(dF, aes_string(x="aoo", y="values", colour="GS"))
-  p <- p + geom_point(size=ps)
+  # p <- p + geom_point(size=ps)
   p <- p + geom_segment(x=min(dF$aoo),
                         xend=br$psi[[2]],
-                        y=min(dF$aoo)*br$coefficients[[2]]+br$coefficients[[1]],
+                        y=yMin,
                         yend=y,
                         colour="black")
   
   p <- p + geom_segment(x=br$psi[[2]],
                         xend=max(dF$aoo),
                         y=y,
-                        yend=max(dF$aoo)*br$coefficients[[3]]+br$coefficients[[1]],
+                        yend=yMax,
                         colour="black")
+  
+  # specify y axis
+  yGap = yMax - yMin
+  yMin.axis = yMin - 0.05*yGap
+  yMax.axis = yMax + 0.05*yGap
+  p <- p + scale_y_continuous(limits=c(yMin.axis, yMax.axis))
   
   colList = unlist(cols[levels(dF$GS)])
   p <- p + scale_colour_manual(name="Group",values=as.vector(colList))
@@ -1300,7 +1416,8 @@ breakPointDiscontinuous <- function(metric,
                                     outDir="wholeBrainVsAOOResults",
                                     weighted=FALSE,
                                     exclNeg=FALSE,
-                                    h=30,w=45,s=4,ts=12,ps=4){
+                                    h=30,w=45,s=4,ts=12,ps=4,
+                                    normalise=TRUE){
   # define log output file
   if(weighted){
     outFile = paste(outDir,
@@ -1354,12 +1471,17 @@ breakPointDiscontinuous <- function(metric,
   
   # filter out gene negative subjects
   if(exclNeg==FALSE){
-    dFgn <- dF[dF$GS=="gene negative",]
     outFile = paste(outFile, "GenePos", sep="")
   }
   
+  dFgn <- dF[dF$GS=="gene negative",]
   dF <- dF[dF$GS!="gene negative",]
   dF$GS <- factor(as.character(dF$GS), levels=c("gene carriers", "FTD"))
+  
+  # calculate z scores
+  sd.geneNeg <- sd(dFgn[,"values"])
+  mean.geneNeg <- mean(dFgn[,"values"])
+  dF <- cbind(dF, values.norm=sapply(dF$values, function(x) (x-mean.geneNeg)/sd.geneNeg))
   
   #   # filter out affected subjects less than t=0 and gene positive greater than t=0
   #   dF <- rbind(dF[dF$GS=="FTD" && dF$aoo>=0,],
@@ -1408,19 +1530,27 @@ breakPointDiscontinuous <- function(metric,
   
   # plot breakpoint data
   y <- piecewise$coefficients[[1]] # get the y value of the piecewiseeakpoint
-  p <- ggplot(dF, aes_string(x="aoo", y="values"))
+  p <- ggplot(dF, aes_string(x="aoo", y="values.norm"))
   if(exclNeg==FALSE){
     gnlm <- lm(values ~ aoo, data=dFgn)
     int <- gnlm[["coefficients"]][[1]]
     slope <- gnlm[["coefficients"]][[2]]
     
-    p <- p + geom_segment(x=min(dFgn$aoo),
-                          xend=max(dFgn$aoo),
-                          y=min(dF$aoo)*gnlm$coefficients[[2]] + gnlm$coefficients[[1]],
-                          yend= max(dF$aoo)*gnlm$coefficients[[2]] + gnlm$coefficients[[1]],
-                          size=1.5,
-                          colour="#E69F00",
-                          linetype="longdash")
+    yVal = min(dF$aoo)*gnlm$coefficients[[2]] + gnlm$coefficients[[1]]
+    # yVal = (yVal-mean.geneNeg)/sd.geneNeg
+    yendVal = max(dF$aoo)*gnlm$coefficients[[2]] + gnlm$coefficients[[1]]
+    # yendVal = (yVal-mean.geneNeg)/sd.geneNeg
+
+    if(!normalise){
+      p <- p + geom_segment(x=min(dFgn$aoo),
+                            xend=max(dFgn$aoo),
+                            y=yVal,
+                            yend=yendVal,
+                            size=1.5,
+                            colour="#E69F00",
+                            linetype="longdash")
+      
+    }
     
     # set x axis limits
     if(min(dF$aoo) < min(dFgn$aoo)){
@@ -1439,22 +1569,59 @@ breakPointDiscontinuous <- function(metric,
     p <- p + scale_x_continuous(breaks = seq(-100,100,10))
   }
   
-  p <- p + geom_point(size=ps, shape=16, aes_string(colour="GS"))
+  yMin = min(dF$aoo)*(piecewise$coefficients[[2]]+piecewise$coefficients[[5]])+y+piecewise$coefficients[[3]]
+  yMax = max(dF$aoo)*piecewise$coefficients[[2]]+piecewise$coefficients[[1]]
+  yEndVal = y+piecewise$coefficients[[3]]
+  if(normalise){
+    yMin = (yMin - mean.geneNeg)/sd.geneNeg
+    yMax = (yMax - mean.geneNeg)/sd.geneNeg
+    yEndVal = (yEndVal - mean.geneNeg)/sd.geneNeg
+    yVal = (y-mean.geneNeg)/sd.geneNeg
+  } else {
+    yVal = y
+  }
+
+  # p <- p + geom_point(size=ps, shape=16, aes_string(colour="GS"))
   p <- p + geom_segment(x=min(dF$aoo),
                         xend=0.,
-                        y=min(dF$aoo)*(piecewise$coefficients[[2]]+piecewise$coefficients[[5]])+y+piecewise$coefficients[[3]],
-                        yend=y+piecewise$coefficients[[3]],
+                        y=yMin,
+                        yend=yEndVal,
                         size=1.5,
                         colour="black")
   
   p <- p + geom_segment(x=0.,
                         xend=max(dF$aoo),
-                        y=y,
-                        yend=max(dF$aoo)*piecewise$coefficients[[2]]+piecewise$coefficients[[1]],
+                        y=yVal,
+                        yend=yMax,
                         size=1.5,
                         colour="black")
   
   colList = unlist(cols[levels(dF$GS)])
+  
+  # specify y axis
+  yGap = max(c(yMin,yEndVal,yMax,yVal)) - min(c(yMin,yEndVal,yMax))
+  yMin.axis = min(c(yMin,yEndVal,yMax,yVal)) - 0.05*yGap
+  yMax.axis = max(c(yMin,yEndVal,yMax,yVal)) + 0.05*yGap
+
+  yMin.lab <- round(yMin.axis, digits=1)
+  yMax.lab <- round(yMax.axis, digits=1)
+  
+  if(yGap>1){
+    dg = 0
+  } else if(yGap>0.1){
+    dg = 1
+  } else if(yGap>0.01){
+    dg = 2
+  } else if(yGap>0.001){
+    dg=3
+  }
+   
+  byVal = round((yMax.lab - yMin.lab)/8, digits=dg)
+  if(byVal==0){byVal=1}
+
+  breakList = seq(yMin.lab-byVal, yMax.lab+byVal, by=byVal)
+  p <- p + scale_y_continuous(limits=c(yMin.axis, yMax.axis),
+                              breaks = breakList)
 
   # from line below: title=paste(metricName, "discontinuous breakpoint analysis", sep="\n"), 
   p <- p + labs(title="", y=metricName, x="Years from estimated age of onset") + theme(axis.title.x=element_blank(), legend.key=element_rect(fill="white", colour="white"))
