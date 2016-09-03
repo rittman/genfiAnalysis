@@ -29,12 +29,16 @@ fn <- function(x,a=1,b=2){
   }
 }
 
-importGraphData <- function(metric, weighted, edgePC=3, Age=TRUE){
+importGraphData <- function(metric, weighted, edgePC=3, Age=TRUE, lobe=NA){
   # define input file
   if(weighted){
     inFile = paste("d2",metric,"wt","local",sep="_")
   } else {
     inFile = paste("d2",metric,"local",sep="_")
+  }
+  
+  if(!is.na(lobe)){
+    inFile = paste(inFile,lobe,sep="_")
   }
   
   # import data
@@ -1859,11 +1863,11 @@ demographics <- function(demog, typeList, sp=NA, exclNeg=FALSE){
                   FTD=paste(round(dF.wb[["FTD", "mean"]], digits=1),
                             " (",round(dF.wb[["FTD", "sd"]], digits=1),")",
                             sep=""),
-                  # negVsFTD.t=negVsFTD[["statistic"]],
+                  # negVsFTD.stat=negVsFTD[["statistic"]],
                   # negVsFTD.p=negVsFTD[["p.value"]],
-                  # negVsCarrier.t=negVsCarrier[["statistic"]],
+                  # negVsCarrier.stat=negVsCarrier[["statistic"]],
                   # negVsCarrier.p=negVsCarrier[["p.value"]],
-                  # FTDVsCarrier.t=FTDVsCarrier[["statistic"]],
+                  FTDVsCarrier.stat=FTDVsCarrier[["statistic"]],
                   FTDVsCarrier.p=FTDVsCarrier[["p.value"]]
       )
       )
@@ -1882,43 +1886,62 @@ demographics <- function(demog, typeList, sp=NA, exclNeg=FALSE){
                   FTD=paste(round(dF.wb[["FTD", "mean"]], digits=1),
                             " (",round(dF.wb[["FTD", "sd"]], digits=1),")",
                             sep=""),
-                  # negVsFTD.t=negVsFTD[["statistic"]],
+                  negVsFTD.stat=negVsFTD[["statistic"]],
                   negVsFTD.p=negVsFTD[["p.value"]],
-                  # negVsCarrier.t=negVsCarrier[["statistic"]],
+                  negVsCarrier.stat=negVsCarrier[["statistic"]],
                   negVsCarrier.p=negVsCarrier[["p.value"]],
-                  # FTDVsCarrier.t=FTDVsCarrier[["statistic"]],
+                  FTDVsCarrier.stat=FTDVsCarrier[["statistic"]],
                   FTDVsCarrier.p=FTDVsCarrier[["p.value"]]
                   )
              )
     }
   } else if(type=="ordinal"){
-    dF.cst <- chisq.test(dF.wb[,c(-1,-3)])
-    
-    if(sum(dF.wb[,"count2"]!=0)){
-      if(!exclNeg){
+    if(sum(dF.wb[,"count2"]!=0)){ # in the event there are three categories of the demographic
+      
+      if(!exclNeg){ # if negatives are excluded
         geneNeg=paste(dF.wb[["gene negative", "count0"]],
                       dF.wb[["gene negative", "count1"]],
                       dF.wb[["gene negative", "count2"]],
                       sep="/")
-      } else {
+        
+        # post-hoc chi-square tests
+        negVsFTD <- chisq.test(dF.wb[c("FTD","gene negative"),])
+        negVsCarrier <- chisq.test(dF.wb[c("gene carriers","gene negative"),])
+        
+      } else { # if negatives are included
         geneNeg=NA
+        negVsFTD = list(p.value=NA,
+                        statistic=NA)
+        negVsCarrier = list(p.value=NA,
+                            statistic=NA)
       }
-      
       geneCarriers=paste(dF.wb[["gene carriers", "count0"]],
                          dF.wb[["gene carriers", "count1"]],
                          dF.wb[["gene carriers", "count2"]],
                          sep="/")
+      
       FTD=paste(dF.wb[["FTD", "count0"]],
                 dF.wb[["FTD", "count1"]],
                 dF.wb[["FTD", "count2"]],
                 sep="/")
-    } else {
+      
+    } else { # in the event there are only two categorical variables
+      dF.wb <- dF.wb[,-3]
       if(!exclNeg){
         geneNeg=paste(dF.wb[["gene negative", "count0"]],
                       dF.wb[["gene negative", "count1"]],
                       sep="/")
+        
+        # post-hoc chi-square tests
+        negVsFTD <- chisq.test(dF.wb[c("FTD","gene negative"),])
+        negVsCarrier <- chisq.test(dF.wb[c("gene carriers","gene negative"),])
+        
       } else {
         geneNeg=NA
+        negVsFTD = list(p.value=NA,
+                        statistic=NA)
+        negVsCarrier = list(p.value=NA,
+                            statistic=NA)
       }
       
       geneCarriers=paste(dF.wb[["gene carriers", "count0"]],
@@ -1928,6 +1951,10 @@ demographics <- function(demog, typeList, sp=NA, exclNeg=FALSE){
                 dF.wb[["FTD", "count1"]],
                 sep="/")
     }
+    dF.cst <- chisq.test(dF.wb) # perform chi-square test
+
+    # post-hoc chi-square
+    FTDVsCarrier <- chisq.test(dF.wb[c("FTD","gene carriers"),])
     
     if(exclNeg){
       return(list(Demographic=demog,
@@ -1937,12 +1964,12 @@ demographics <- function(demog, typeList, sp=NA, exclNeg=FALSE){
                   ChiSq=dF.cst$statistic,
                   geneCarriers=geneCarriers,
                   FTD=FTD,
-                  # negVsFTD.t=NA,
-                  # negVsFTD.p=NA,
-                  # negVsCarrier.t=NA,
-                  # negVsCarrier.p=NA,
-                  # FTDVsCarrier.t=NA,
-                  FTDVsCarrier.p=NA
+#                   negVsFTD.stat=NA,
+#                   negVsFTD.p=NA,
+#                   negVsCarrier.stat=NA,
+#                   negVsCarrier.p=NA,
+                  FTDVsCarrier.stat=FTDVsCarrier[["statistic"]],
+                  FTDVsCarrier.p=FTDVsCarrier[["p.value"]]
                   )
              )
     } else {
@@ -1954,12 +1981,12 @@ demographics <- function(demog, typeList, sp=NA, exclNeg=FALSE){
                   geneNeg=geneNeg,
                   geneCarriers=geneCarriers,
                   FTD=FTD,
-                  # negVsFTD.t=NA,
-                  negVsFTD.p=NA,
-                  # negVsCarrier.t=NA,
-                  negVsCarrier.p=NA,
-                  # FTDVsCarrier.t=NA,
-                  FTDVsCarrier.p=NA
+                  negVsFTD.stat=negVsFTD[["statistic"]],
+                  negVsFTD.p=negVsFTD[["p.value"]],
+                  negVsCarrier.stat=negVsCarrier[["statistic"]],
+                  negVsCarrier.p=negVsCarrier[["p.value"]],
+                  FTDVsCarrier.stat=FTDVsCarrier[["statistic"]],
+                  FTDVsCarrier.p=FTDVsCarrier[["p.value"]]
                   )
              )
     }
