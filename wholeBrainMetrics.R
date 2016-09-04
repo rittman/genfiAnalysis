@@ -223,7 +223,9 @@ wholeBrainAnalysis <- function(metric,
                                outDir="wholeBrainResults",
                                edgePC=3,
                                h=15,w=15,s=4,ts=12,ps=4,  # ts = text size
-                               excludeNegs=FALSE){ # TRUE to exclude gene negative subjects
+                               excludeNegs=FALSE, # TRUE to exclude gene negative subjects
+                               lobe=NA){
+  
   # create output directory
   dir.create(outDir, showWarnings = FALSE)
   
@@ -246,7 +248,7 @@ wholeBrainAnalysis <- function(metric,
   initiateLog(logFile, metricName)
   
   # import graph data
-  dF <- importGraphData(metric, weighted, edgePC)
+  dF <- importGraphData(metric, weighted, edgePC, lobe=lobe)
   
   # apply spike percentage threshold
   dF <- applySP(dF, sp)
@@ -278,6 +280,11 @@ wholeBrainAnalysis <- function(metric,
   
   # stack data and take the mean if it is a node-wise measures
   dF.wb <- stackIt(dF, metric)
+  
+  # add lobe information if necessary
+  if(!is.na(lobe)){
+    dF.wb <- data.frame(dF.wb, lobe=lobe)
+  }
   
   if(!excludeNegs){
     dF.wb.summary = ddply(dF.wb, .(), summarise,
@@ -500,7 +507,12 @@ wholeBrainAnalysis <- function(metric,
   
   endLog(logFile)
   
-  return(list(t1, t2, t3, t4, t5, t6, p,pg))
+  if(is.na(lobe)){
+    return(list(t1, t2, t3, t4, t5, t6, p, pg))
+  } else {
+    return(list(t1, t2, t3, t4, t5, t6, p, pg, dF.wb))
+  }
+  
 }
 
 wholeBrainAnalysisMixedEffects <- function(metric,
