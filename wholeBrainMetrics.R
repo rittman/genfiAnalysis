@@ -452,7 +452,10 @@ wholeBrainAnalysis <- function(metric,
   p <- p + labs(y=metricName) + theme(axis.title.x=element_blank())
   p <- p + theme(text=element_text(size=ts))
   p <- p + scale_fill_manual(name="Group",values=as.vector(colList))
-  p <- p + theme(legend.position="none") 
+  p <- p + theme(legend.position="none")
+  if(!is.na(lobe)){
+    p <- p + labs(title=lobe)
+  }
   
   if(excludeNegs){
     outw = 2.5
@@ -660,7 +663,8 @@ graphTimeComparison <- function(metric,
                                 edgePC=3,
                                 h=30,w=45,s=4,ts=12,ps=4,
                                 exclNeg=TRUE,
-                                family=FALSE){
+                                family=FALSE,
+                                lobe=NA){
   # create output directory
   dir.create(outDir, showWarnings = FALSE)
   
@@ -683,7 +687,7 @@ graphTimeComparison <- function(metric,
   
   ### function to plot and analyse the relationship between graph metrics and expected time to disease onset
   # import graph metric data
-  dF <- importGraphData(metric, weighted, edgePC)
+  dF <- importGraphData(metric, weighted, edgePC, lobe=lobe)
   
   # filter by spike percentage
   dF <- applySP(dF, sp)
@@ -702,6 +706,11 @@ graphTimeComparison <- function(metric,
   # merge age of onset data
   dF <- merge(dF, dF.aoo, by="wbic")
   dF <- unique(dF) # remove duplicates that may have sneaked in
+  
+  # add lobe information if necessary
+  if(!is.na(lobe)){
+    dF <- data.frame(dF, lobe=lobe)
+  }
   
 #   # create dataframe to contrast gene negative with all gene positives
 #   dFgngp <- dF
@@ -749,6 +758,9 @@ graphTimeComparison <- function(metric,
   p5 <- p5 + labs(title="", y=metricName, x="Estimated age of onset") + theme(axis.title.x=element_blank()) #, legend.key=element_rect(fill="white", colour="white"))
   p5 <- p5 + theme_bw() # + theme(legend.key = element_rect(colour="#FFFFFF", fill = "#FFFFFF"))
   p5 <- p5 + theme(text=element_text(size=ts), plot.title=element_text(size=ts))
+  if(!is.na(lobe)){
+    p5 <- p5 + labs(title=lobe)
+  }
 
   plotOutName = paste(paste(outFile, "simpLM", sep="_"),"png",sep=".")
 
@@ -802,7 +814,9 @@ graphTimeComparison <- function(metric,
   p1 <- p1 + labs(title="", y=metricName, x="Estimated age of onset") + theme(axis.title.x=element_blank(), legend.key=element_rect(fill="white", colour="white"))
   p1 <- p1 + theme_bw() + theme(legend.key = element_rect(colour="#FFFFFF", fill = "#FFFFFF"))
   p1 <- p1 + theme(text=element_text(size=ts), plot.title=element_text(size=ts))
-  
+  if(!is.na(lobe)){
+    p1 <- p1 + labs(title=lobe)
+  }
   plotOutName = paste(outFile,"png",sep=".")
 
   ggsave(plotOutName,
