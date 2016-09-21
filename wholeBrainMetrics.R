@@ -224,7 +224,9 @@ wholeBrainAnalysis <- function(metric,
                                edgePC=3,
                                h=15,w=15,s=4,ts=12,ps=4,  # ts = text size
                                excludeNegs=FALSE, # TRUE to exclude gene negative subjects
-                               lobe=NA){
+                               lobe=NA, # define the lobe of the brain to examine
+                               hubT=NA # hub threshold
+                               ){
   
   # create output directory
   dir.create(outDir, showWarnings = FALSE)
@@ -249,6 +251,19 @@ wholeBrainAnalysis <- function(metric,
   
   # import graph data
   dF <- importGraphData(metric, weighted, edgePC, lobe=lobe)
+  
+  # if there is a hub threshold, apply it now
+  # if a hub threshold is defined, then firstly read the file that contains the hub definitions
+  if(!is.na(hubT)){
+    lines=readLines("Control/degree_allSubject.txt") # read the file as lines
+    lineList = lapply(lines, function(x) strsplit(x, " ")) # extract the lines in to a list
+    hubs = unlist(lineList[[which(sapply(lineList, function(x) return(x[[1]][[1]]))==as.character(hubT))]])[-1]  # extract the line starting with the required hub threshold (-1 removes the threshold from the final list)
+    hubs = sapply(hubs, function(x) paste("X",x,sep = ""))
+    
+    # now filter by the hubs
+    X0Col = which(names(dF)=="X0")-1
+    dF <- cbind(dF[1:X0Col], dF[hubs])
+  }
   
   # apply spike percentage threshold
   dF <- applySP(dF, sp)
@@ -682,6 +697,13 @@ graphTimeComparison <- function(metric,
   }
   logFile = paste(outFile, "logFile.tex", sep="_")
   
+  # create label for legends according to lobe
+  if(!is.na(lobe)){
+    lobeTag=lobe
+  } else {
+    lobeTag=""
+  }
+  
   # create log file
   initiateLog(logFile, metricName)
   
@@ -772,7 +794,7 @@ graphTimeComparison <- function(metric,
          units="mm")
   
   t7 <- xtable(summary(lm.simpLM),
-               caption=paste("summary of linear model combining all groups for", metricName),
+               caption=paste("summary of linear model combining all groups for", metricName, lobeTag),
                digits=c(0,2,2,2,2),
                display=c("s","fg","fg","fg","g"))
   
@@ -827,7 +849,7 @@ graphTimeComparison <- function(metric,
          units="mm")
   
   t1 <- xtable(summary(lm.all),
-               caption=paste("summary of linear model for the interaction between estimated age of onset (aoo) and gene status (GS) on", metricName),
+               caption=paste("summary of linear model for the interaction between estimated age of onset (aoo) and gene status (GS) on", metricName, lobeTag),
                digits=c(0,2,2,2,2),
                display=c("s","fg","fg","fg","g"))
   
@@ -842,7 +864,7 @@ graphTimeComparison <- function(metric,
   t2 <- xtable(aov.lm.null,
                display=c("s","d","fg","d","fg","fg","fg"),
                digits = c(0, 0, 2, 0, 2, 2, 2),
-               caption = "Assessment of whether there is a difference between slopes of gene positive and gene affected groups by comparing models including and excluding and interaction between age at onset and gene status")
+               caption = paste("Assessment of whether there is a difference between slopes of gene positive and gene affected groups by comparing models including and excluding and interaction between age at onset and gene status", lobeTag))
   
   print(t2,
         include.rownames=FALSE,
@@ -896,7 +918,7 @@ graphTimeComparison <- function(metric,
   }
   
   t3 <- xtable(summary(mod)[["coefficients"]],
-               caption="Linear mixed effects model, fixed effects",
+               caption=paste("Linear mixed effects model, fixed effects", lobeTag),
                digits=c(0,2,2,2,2,2),
                display=c("s","fg","fg","fg","fg","fg"))
 
@@ -909,7 +931,7 @@ graphTimeComparison <- function(metric,
                                      attributes(VarCorr(mod)[[2]])[["stddev"]],
                                      attributes(VarCorr(mod))[["sc"]]),
                           row.names = c("Family", "Site", "Residual")),                          
-               caption="Linear mixed effects model, random effects",
+               caption=paste("Linear mixed effects model, random effects", lobeTag),
                digits=c(0,2),
                display=c("s","fg"))
   
@@ -924,7 +946,7 @@ graphTimeComparison <- function(metric,
   t5 <- xtable(data.frame(vc),
                display=c("s","s","s","s","g","fg"),
                digits=c(0,0,0,0,2,2),
-               caption="Variance of random effects")
+               caption=paste("Variance of random effects", lobeTag))
   
   print(t5,
         file=logFile,
@@ -946,7 +968,7 @@ graphTimeComparison <- function(metric,
   modComparison <- anova(mod,nulMod)
   
   t6 <- xtable(modComparison,
-               caption = "Assessment of whether there is a difference between slopes of gene positive and gene affected groups by comparing models including and excluding and interaction between age at onset and gene status",
+               caption = paste("Assessment of whether there is a difference between slopes of gene positive and gene affected groups by comparing models including and excluding and interaction between age at onset and gene status", lobeTag),
                digits = c(0,0,2,2,2,2,2,2,2),
                display = c("s","d","fg","fg","fg","fg","d","fg","fg"))
   
@@ -959,7 +981,7 @@ graphTimeComparison <- function(metric,
   t8 <- xtable(summary(mod)[[10]],
                     digits=c(0,2,2,1,2,2),
                     display=c("s","fg","f","f","f","g"),
-                    caption=paste("Satterthwaite estimates of pvalues of linear mixed effects model for", metricName))
+                    caption=paste("Satterthwaite estimates of pvalues of linear mixed effects model for", metricName, lobeTag))
   
   # now run the mixed effects model comparing gene negative with gene positive group
   if(!exclNeg){
@@ -1002,7 +1024,7 @@ graphTimeComparison <- function(metric,
     }
     
     t9 <- xtable(summary(mod)[["coefficients"]],
-                 caption="Linear mixed effects model, fixed effects",
+                 caption=paste("Linear mixed effects model, fixed effects", lobeTag),
                  digits=c(0,2,2,2,2,2),
                  display=c("s","fg","fg","fg","fg","fg"))
     
@@ -1015,7 +1037,7 @@ graphTimeComparison <- function(metric,
                                        attributes(VarCorr(mod)[[2]])[["stddev"]],
                                        attributes(VarCorr(mod))[["sc"]]),
                             row.names = c("Family", "Site", "Residual")),                          
-                 caption="Linear mixed effects model, random effects",
+                 caption=paste("Linear mixed effects model, random effects", lobeTag),
                  digits=c(0,2),
                  display=c("s","fg"))
     
@@ -1030,7 +1052,7 @@ graphTimeComparison <- function(metric,
     t11 <- xtable(data.frame(vc),
                  display=c("s","s","s","s","g","fg"),
                  digits=c(0,0,0,0,2,2),
-                 caption="Variance of random effects")
+                 caption=paste("Variance of random effects", lobeTag))
     
     print(t11,
           file=logFile,
@@ -1052,7 +1074,7 @@ graphTimeComparison <- function(metric,
     modComparison <- anova(mod,nulMod)
     
     t12 <- xtable(modComparison,
-                 caption = "Assessment of whether there is a difference between slopes of gene positive and gene affected groups by comparing models including and excluding and interaction between age at onset and gene status",
+                 caption = paste("Assessment of whether there is a difference between slopes of gene positive and gene affected groups by comparing models including and excluding and interaction between age at onset and gene status", lobeTag),
                  digits = c(0,0,2,2,2,2,2,2,2),
                  display = c("s","d","fg","fg","fg","fg","d","fg","fg"))
     
@@ -1065,7 +1087,7 @@ graphTimeComparison <- function(metric,
     t13 <- xtable(summary(mod)[[10]],
                  digits=c(0,2,2,1,2,2),
                  display=c("s","fg","f","f","f","g"),
-                 caption=paste("Satterthwaite estimates of pvalues of linear mixed effects model for", metricName))
+                 caption=paste("Satterthwaite estimates of pvalues of linear mixed effects model for", metricName, lobeTag))
   } else {
     p6=NA
     p7=NA
