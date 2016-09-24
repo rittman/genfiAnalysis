@@ -29,7 +29,7 @@ fn <- function(x,a=1,b=2){
   }
 }
 
-importGraphData <- function(metric, weighted, edgePC=3, Age=TRUE, lobe=NA){
+importGraphData <- function(metric, weighted, edgePC=3, Age=TRUE, lobe=NA, hubT=NA, nonHubs=FALSE){
   # define input file
   if(weighted){
     inFile = paste("d2",metric,"wt","local",sep="_")
@@ -53,6 +53,23 @@ importGraphData <- function(metric, weighted, edgePC=3, Age=TRUE, lobe=NA){
   dF$GS = as.factor(dF$GS)
   dF$GS = revalue(dF$GS, c("0" = "gene negative", "1"="gene carriers", "2"="FTD"))
   dF$site = as.factor(dF$site)
+  
+  # if there is a hub threshold, apply it now
+  # if a hub threshold is defined, then firstly read the file that contains the hub definitions
+  if(!is.na(hubT)){
+    lines=readLines("/home/tim/GENFI/GENFI_camgrid_20150525/Control/degree_allSubjects.txt") # read the file as lines
+    lineList = lapply(lines, function(x) strsplit(x, " ")) # extract the lines in to a list
+    hubs = unlist(lineList[[which(sapply(lineList, function(x) return(x[[1]][[1]]))==as.character(hubT))]])[-1]  # extract the line starting with the required hub threshold (-1 removes the threshold from the final list)
+    hubs = sapply(hubs, function(x) paste("X",x,sep = ""))
+    
+    if(nonHubs){
+      dF <- dF[!sapply(names(dF), function(x) x %in% hubs)]
+    } else {
+      # now filter by the hubs
+      X0Col = which(names(dF)=="X0")-1
+      dF <- cbind(dF[1:X0Col], dF[hubs])
+    }
+  }
   
   if(Age){
     # add age
@@ -222,7 +239,7 @@ wholeBrainAnalysis <- function(metric,
                                sp, weighted=TRUE,
                                outDir="wholeBrainResults",
                                edgePC=3,
-                               h=15,w=15,s=4,ts=12,ps=4,  # ts = text size
+                               h=15,w=15,s=4,tsz=12,ps=4,  # tsz = text size
                                excludeNegs=FALSE, # TRUE to exclude gene negative subjects
                                lobe=NA, # define the lobe of the brain to examine
                                hubT=NA # hub threshold
@@ -250,20 +267,7 @@ wholeBrainAnalysis <- function(metric,
   initiateLog(logFile, metricName)
   
   # import graph data
-  dF <- importGraphData(metric, weighted, edgePC, lobe=lobe)
-  
-  # if there is a hub threshold, apply it now
-  # if a hub threshold is defined, then firstly read the file that contains the hub definitions
-  if(!is.na(hubT)){
-    lines=readLines("Control/degree_allSubject.txt") # read the file as lines
-    lineList = lapply(lines, function(x) strsplit(x, " ")) # extract the lines in to a list
-    hubs = unlist(lineList[[which(sapply(lineList, function(x) return(x[[1]][[1]]))==as.character(hubT))]])[-1]  # extract the line starting with the required hub threshold (-1 removes the threshold from the final list)
-    hubs = sapply(hubs, function(x) paste("X",x,sep = ""))
-    
-    # now filter by the hubs
-    X0Col = which(names(dF)=="X0")-1
-    dF <- cbind(dF[1:X0Col], dF[hubs])
-  }
+  dF <- importGraphData(metric, weighted, edgePC, lobe=lobe, hubT=hubT)
   
   # apply spike percentage threshold
   dF <- applySP(dF, sp)
@@ -381,6 +385,8 @@ wholeBrainAnalysis <- function(metric,
           include.rownames=FALSE,
           file=logFile,
           append=TRUE)
+  } else {
+    t4 = NA
   }
   
   if(excludeNegs){
@@ -465,7 +471,7 @@ wholeBrainAnalysis <- function(metric,
   
   p <- p + theme_bw()
   p <- p + labs(y=metricName) + theme(axis.title.x=element_blank())
-  p <- p + theme(text=element_text(size=ts))
+  p <- p + theme(text=element_text(size=tsz))
   p <- p + scale_fill_manual(name="Group",values=as.vector(colList))
   p <- p + theme(legend.position="none")
   if(!is.na(lobe)){
@@ -514,7 +520,7 @@ wholeBrainAnalysis <- function(metric,
   pg <- pg + scale_y_continuous(limits=c(ymin, ytop.max))
   pg <- pg + theme_bw()
   pg <- pg + theme(axis.title.x=element_blank(), axis.title.y=element_blank())  #
-  pg <- pg + theme(text=element_text(size=ts))
+  pg <- pg + theme(text=element_text(size=tsz))
   
   plotFile = paste(paste(outFile,"byGene",sep="_"), "png", sep=".")
   ggsave(plotFile,
@@ -538,9 +544,11 @@ wholeBrainAnalysisMixedEffects <- function(metric,
                                            cols,
                                            sp, weighted=TRUE,
                                            outDir="wholeBrainResults",
-                                           edgePC=3, ts=12,
+                                           edgePC=3, tsz=12,
                                            exclNeg=FALSE,
-                                           family=FALSE){
+                                           family=FALSE,
+                                           lobe=NA, # define the lobe of the brain to examine
+                                           hubT=NA){
   
   # create output directory
   dir.create(outDir, showWarnings = FALSE)
@@ -558,9 +566,16 @@ wholeBrainAnalysisMixedEffects <- function(metric,
   }
   logFile = paste(outFile, "logFile.tex", sep="_")
   
+  # create label for legends according to lobe
+  if(!is.na(lobe)){
+    lobeTag=lobe
+  } else {
+    lobeTag=""
+  }
+  
   # import graph data
-  dF <- importGraphData(metric, weighted, edgePC)
-
+  dF <- importGraphData(metric, weighted, edgePC, lobe=lobe, hubT=hubT)
+  
   # apply spike percentage threshold
   dF <- applySP(dF, sp)
   
@@ -568,6 +583,11 @@ wholeBrainAnalysisMixedEffects <- function(metric,
   
   # stack data and take the mean if it is a node-wise measures
   dF.wb <- stackIt(dF, metric)
+  
+  # add lobe information if necessary
+  if(!is.na(lobe)){
+    dF.wb <- data.frame(dF.wb, lobe=lobe)
+  }
   
   # Set contrasts if control group are to be excluded
   # NB this retains the control group in the estimation of the age effect and as a null regressor
@@ -595,18 +615,18 @@ wholeBrainAnalysisMixedEffects <- function(metric,
   t1 <- xtable(mod.coef$site,
                  digits=c(0,2),
                  display=c("s", "fg"),
-               caption = "Linear mixed effects model, site coefficients")
+               caption = paste("Linear mixed effects model, site coefficients",lobeTag))
 
   t2 <- xtable(mod.coef$gene,
                digits=c(0,2),
                display=c("s", "fg"),
-               caption = "Linear mixed effects model, gene coefficients")
+               caption = paste("Linear mixed effects model, gene coefficients",lobeTag))
   
   if(family){
     t3 <- xtable(mod.coef$Family,
                  digits=c(0,2),
                  display=c("s", "fg"),
-                 caption = "Linear mixed effects model, family coefficients")
+                 caption = paste("Linear mixed effects model, family coefficients",lobeTag))
   } else {
     t3 = NA
   }
@@ -659,7 +679,7 @@ wholeBrainAnalysisMixedEffects <- function(metric,
     t5 <- xtable(summary(mod)[[10]],
                  digits=c(0,2,2,1,2,2),
                  display=c("s","fg","f","f","f","g"),
-                 caption=paste("Satterthwaite estimates of pvalues of linear mixed effects model for", metricName))
+                 caption=paste("Satterthwaite estimates of pvalues of linear mixed effects model for", metricName,lobeTag))
   
   
   print(t5,
@@ -669,6 +689,168 @@ wholeBrainAnalysisMixedEffects <- function(metric,
   return(list(t1, t2, t3, t4, t5, p1, p2, p3))
 }
 
+wholeBrainAnalysisMixedEffectsHubComparison <- function(metric,
+                                                         metricName,
+                                                         cols,
+                                                         sp, weighted=TRUE,
+                                                         outDir="wholeBrainResults",
+                                                         edgePC=3, tsz=12,
+                                                         exclNeg=FALSE,
+                                                         family=FALSE,
+                                                         hubT=1.5,
+                                                         h=15,w=15,s=4,ps=4  # tsz = text size
+){
+  # create output directory
+  dir.create(outDir, showWarnings = FALSE)
+  
+  # define log output file
+  if(weighted){
+    outFile = paste(outDir,
+                    paste(metric,"wt",sep="_"),
+                    sep="/")
+    
+  } else {
+    outFile = paste(outDir,
+                    paste(metric,sep="_"),
+                    sep="/")
+  }
+  logFile = paste(outFile, "logFile.tex", sep="_")
+  
+  # import graph data
+  dF <- importGraphData(metric, weighted, edgePC, hubT=hubT)
+  # apply spike percentage threshold
+  dF <- applySP(dF, sp)
+  dF.wb <- stackIt(dF, metric)
+  dF.wb <- cbind(dF.wb, hub="hub")
+  
+  dF.nonhubs <- importGraphData(metric, weighted, edgePC, hubT=hubT, nonHubs=TRUE)
+  # apply spike percentage threshold
+  dF.nonhubs <- applySP(dF.nonhubs, sp)
+  dF.wb.nonhubs <- stackIt(dF.nonhubs, metric)
+  dF.wb.nonhubs <- cbind(dF.wb.nonhubs, hub="nonhub")
+  
+  dF.wb <- rbind(dF.wb, dF.wb.nonhubs)
+  
+  colList = unlist(cols[levels(dF$GS)])
+  
+  # Set contrasts if control group are to be excluded
+  # NB this retains the control group in the estimation of the age effect and as a null regressor
+  if(exclNeg){
+    cMat <- matrix(c(0,-1,1), nrow = 3)
+    rownames(cMat) <- levels(dF.wb$GS)
+    colnames(cMat) <- c("carriersVsFTD")
+    attr(dF.wb$GS, "contrasts") = cMat
+  }
+  
+  # plot the data
+  p4 <- ggplot(dF.wb, aes_string(x="GS", y="values", fill="hub"))
+  p4 <- p4 + geom_boxplot()
+  
+  p4 <- p4 + theme_bw()
+  p4 <- p4 + labs(y=metricName) + theme(axis.title.x=element_blank())
+  p4 <- p4 + theme(text=element_text(size=tsz), legend.title=element_blank())
+#   p4 <- p4 + scale_fill_manual(name="Group",values=as.vector(colList))
+#   p4 <- p4 + theme(legend.position="none")
+  
+  plotFile = paste(paste(outFile,"HubComparison",sep="_"), "png", sep=".")
+  ggsave(plotFile,
+         scale=s,
+         dpi=600,
+         height=h, width=w,
+         units="mm")
+  
+  # ANOVA of the differences
+  if(family){
+    mod <- lmer(values ~ GS*hub + Age + (1 | wbic) + (1 | gene) + (1 | site) + (1 | Family) + (1 | hub:wbic),
+                data=dF.wb,
+                REML=FALSE)
+  } else {
+    mod <- lmer(values ~ GS*hub + Age + (1 | wbic) + (1 | hub) + (1 | gene) + (1 | site),
+                data=dF.wb,
+                REML=FALSE)
+  }
+  
+  # print random effects of the model
+  mod.coef <- ranef(mod)
+
+  t1 <- xtable(mod.coef$site,
+               digits=c(0,2),
+               display=c("s", "fg"),
+               caption = "Linear mixed effects model, site coefficients")
+  
+  t2 <- xtable(mod.coef$gene,
+               digits=c(0,2),
+               display=c("s", "fg"),
+               caption = "Linear mixed effects model, gene coefficients")
+  
+  if(family){
+    t3 <- xtable(mod.coef$Family,
+                 digits=c(0,2),
+                 display=c("s", "fg"),
+                 caption = "Linear mixed effects model, family coefficients")
+  } else {
+    t3 = NA
+  }
+  
+  print(t1, file=logFile, append=TRUE)
+  print(t2, file=logFile, append=TRUE)
+  if(family){print(t3, file=logFile, append=TRUE)}
+  
+  # plot random effects
+  dF.plot.site <- data.frame(site = row.names(mod.coef$site),
+                             effect = mod.coef$site[[1]])
+  p1 <- ggplot(dF.plot.site, aes_string(x="site",y="effect"))
+  p1 <- p1 + geom_bar(stat="identity") + theme_bw() + ggtitle("Effect size of scan site")
+  
+  dF.plot.gene <- data.frame(gene = row.names(mod.coef$gene),
+                             effect = mod.coef$gene[[1]])
+  p2 <- ggplot(dF.plot.gene, aes_string(x="gene",y="effect"))
+  p2 <- p2 + geom_bar(stat="identity") + theme_bw() + ggtitle("Effect size of gene")
+  
+  if(family){
+    dF.plot.Family <- data.frame(Family = row.names(mod.coef$Family),
+                                 effect = mod.coef$Family[[1]])
+    p3 <- ggplot(dF.plot.Family, aes_string(x="Family",y="effect"))
+    p3 <- p3 + geom_bar(stat="identity") + theme_bw() + ggtitle("Effect size of family")
+    p3 <- p3 + theme(axis.text.x=element_blank())
+  } else {
+    p3 = NA
+  }
+  
+  # print variances
+  vc <- VarCorr(mod)
+  
+  t4 <- xtable(data.frame(vc),
+               display=c("s","s","s","s","g","fg"),
+               digits=c(0,0,0,0,2,2),
+               caption="Variance of random effects")
+  
+  print(t4,
+        file=logFile,
+        append=TRUE,
+        include.rownames=FALSE)
+  
+  #   # Type II ANOVA
+  #   mod.avo <- Anova(mod, type="II")
+  #   
+  #   t5 <- xtable(mod.avo,
+  #                digits=c(0,1,1,2),
+  #                display=c("s","f","d","fg"),
+  #                caption=paste("ANOVA of linear mixed effects model for", metricName))
+  t5 <- xtable(summary(mod)[[10]],
+               digits=c(0,2,2,1,2,2),
+               display=c("s","fg","f","f","f","g"),
+               caption=paste("Satterthwaite estimates of pvalues of linear mixed effects model for", metricName))
+  
+  
+  print(t5,
+        file=logFile,
+        append=TRUE)
+  
+  return(list(t1, t2, t3, t4, t5, p1, p2, p3, p4))
+}
+
+
 graphTimeComparison <- function(metric,
                                 metricName,
                                 sp, # spike percentage
@@ -676,10 +858,11 @@ graphTimeComparison <- function(metric,
                                 weighted=TRUE, # is this a weighted metric?
                                 outDir="wholeBrainVsAOOResults",
                                 edgePC=3,
-                                h=30,w=45,s=4,ts=12,ps=4,
+                                h=30,w=45,s=4,tsz=12,ps=4,
                                 exclNeg=TRUE,
                                 family=FALSE,
-                                lobe=NA){
+                                lobe=NA,
+                                hubT=NA){
   # create output directory
   dir.create(outDir, showWarnings = FALSE)
   
@@ -709,7 +892,7 @@ graphTimeComparison <- function(metric,
   
   ### function to plot and analyse the relationship between graph metrics and expected time to disease onset
   # import graph metric data
-  dF <- importGraphData(metric, weighted, edgePC, lobe=lobe)
+  dF <- importGraphData(metric, weighted, edgePC, lobe=lobe, hubT=hubT)
   
   # filter by spike percentage
   dF <- applySP(dF, sp)
@@ -777,12 +960,9 @@ graphTimeComparison <- function(metric,
 #   p5 <- p5 + geom_abline(intercept=int, slope=slope)
   
   # from line below: paste(metricName, "linear regression", sep="\n")
-  p5 <- p5 + labs(title="", y=metricName, x="Estimated age of onset") + theme(axis.title.x=element_blank()) #, legend.key=element_rect(fill="white", colour="white"))
+  p5 <- p5 + labs(title=lobeTag, y=metricName, x="Estimated age of onset") + theme(axis.title.x=element_blank()) #, legend.key=element_rect(fill="white", colour="white"))
   p5 <- p5 + theme_bw() # + theme(legend.key = element_rect(colour="#FFFFFF", fill = "#FFFFFF"))
-  p5 <- p5 + theme(text=element_text(size=ts), plot.title=element_text(size=ts))
-  if(!is.na(lobe)){
-    p5 <- p5 + labs(title=lobe)
-  }
+  p5 <- p5 + theme(text=element_text(size=tsz), plot.title=element_text(size=tsz))
 
   plotOutName = paste(paste(outFile, "simpLM", sep="_"),"png",sep=".")
 
@@ -833,12 +1013,9 @@ graphTimeComparison <- function(metric,
 
   p1 <- p1 + scale_colour_manual(name="Group",values=as.vector(colList))
   # from line below: paste(metricName, "linear regression", sep="\n")
-  p1 <- p1 + labs(title="", y=metricName, x="Estimated age of onset") + theme(axis.title.x=element_blank(), legend.key=element_rect(fill="white", colour="white"))
+  p1 <- p1 + labs(title=lobeTag, y=metricName, x="Estimated age of onset") + theme(axis.title.x=element_blank(), legend.key=element_rect(fill="white", colour="white"))
   p1 <- p1 + theme_bw() + theme(legend.key = element_rect(colour="#FFFFFF", fill = "#FFFFFF"))
-  p1 <- p1 + theme(text=element_text(size=ts), plot.title=element_text(size=ts))
-  if(!is.na(lobe)){
-    p1 <- p1 + labs(title=lobe)
-  }
+  p1 <- p1 + theme(text=element_text(size=tsz), plot.title=element_text(size=tsz))
   plotOutName = paste(outFile,"png",sep=".")
 
   ggsave(plotOutName,
@@ -1111,7 +1288,7 @@ graphTimeComparisonNL <- function(metric,
                                 weighted=TRUE, # is this a weighted metric?
                                 outDir="wholeBrainVsAOOResults",
                                 edgePC=3,
-                                h=30,w=45,s=4,ts=12,ps=4,
+                                h=30,w=45,s=4,tsz=12,ps=4,
                                 sink=TRUE){
   # create output directory
   dir.create(outDir, showWarnings = FALSE)
@@ -1222,7 +1399,7 @@ graphTimeComparisonNL <- function(metric,
                                  breaks=c("gene carriers", "FTD", "estimates"))
   pq <- pq + theme_bw() + theme(legend.key=element_rect(fill="white", colour="white"))
   pq <- pq + labs(title=paste(metricName, "non-linear regression, quadratic", sep="\n"), y=metricName, x="Estimated time from onset")# + theme(axis.title.x=element_blank())
-  pq <- pq + theme(text=element_text(size=ts), plot.title=element_text(size=ts), plot.title=element_text(size=ts))
+  pq <- pq + theme(text=element_text(size=tsz), plot.title=element_text(size=tsz), plot.title=element_text(size=tsz))
   
 #   print(paste("Saving",paste(outDir,
 #                        paste(paste(metric, "nonLinearEstimatesQuadratic",sep="_"),"png",sep="."),
@@ -1290,7 +1467,7 @@ graphTimeComparisonNL <- function(metric,
                                  breaks=c("gene carriers", "FTD", "estimates"))
   pc <- pc + theme_bw() + theme(legend.key=element_rect(fill="white", colour="white"))
   pc <- pc + labs(title=paste(metricName, "non-linear regression, cubic", sep="\n"), y=metricName, x="Estimated time from onset")# + theme(axis.title.x=element_blank())
-  pc <- pc + theme(text=element_text(size=ts), plot.title=element_text(size=ts))
+  pc <- pc + theme(text=element_text(size=tsz), plot.title=element_text(size=tsz))
   
 #   print(paste("Saving",paste(outDir,
 #                              paste(paste(metric, "nonLinearEstimatesCubic",sep="_"),"png",sep="."),
@@ -1414,7 +1591,7 @@ breakpoint <- function(metric,
                        edgePC=3,
                        outDir="wholeBrainVsAOOResults",
                        weighted=FALSE,
-                       ts=12,ps=4){
+                       tsz=12,ps=4){
   # define log output file
   if(weighted){
     outFile = paste(outDir,
@@ -1507,7 +1684,7 @@ breakpoint <- function(metric,
   p <- p + scale_colour_manual(name="Group",values=as.vector(colList))
   p <- p + labs(title=paste(metricName, "breakpoint analysis", sep="\n"), y=metricName, x="Estimated age of onset") + theme(axis.title.x=element_blank(), legend.key=element_rect(fill="white", colour="white"))
   p <- p + theme_bw() + theme(legend.key = element_rect(colour="#FFFFFF", fill = "#FFFFFF"))
-  p <- p + theme(text=element_text(size=ts), plot.title=element_text(size=ts))
+  p <- p + theme(text=element_text(size=tsz), plot.title=element_text(size=tsz))
   
   return(list(br, p, pVal))
 }
@@ -1521,8 +1698,10 @@ breakPointDiscontinuous <- function(metric,
                                     outDir="wholeBrainVsAOOResults",
                                     weighted=FALSE,
                                     exclNeg=FALSE,
-                                    h=30,w=45,s=4,ts=12,ps=4,
-                                    normalise=TRUE){
+                                    h=30,w=45,s=4,tsz=12,ps=4,
+                                    normalise=TRUE,
+                                    lobe=NA,
+                                    hubT=NA){
   # define log output file
   if(weighted){
     outFile = paste(outDir,
@@ -1538,6 +1717,13 @@ breakPointDiscontinuous <- function(metric,
   
   logFile = paste(outFile, "logFile.tex", sep="_")
   
+  # create label for legends according to lobe
+  if(!is.na(lobe)){
+    lobeTag=lobe
+  } else {
+    lobeTag=""
+  }
+  
   # create output directory
   dir.create(outDir, showWarnings = FALSE)
   
@@ -1546,7 +1732,7 @@ breakPointDiscontinuous <- function(metric,
   
   ### function to plot and analyse the relationship between graph metrics and expected time to disease onset
   # import graph metric data
-  dF <- importGraphData(metric, weighted, edgePC)
+  dF <- importGraphData(metric, weighted, edgePC, lobe=lobe, hubT=hubT)
   
   # filter by spike percentage
   dF <- applySP(dF, sp)
@@ -1601,7 +1787,7 @@ breakPointDiscontinuous <- function(metric,
   piecewise <- lm (values ~ aoo*(aoo<bkpt) + aoo*(aoo>=bkpt), data=dF)
 
   t1 <- xtable(summary(piecewise),
-               caption = "Summary of discontinuous piecewise regression analysis",
+               caption = paste("Summary of discontinuous piecewise regression analysis",lobeTag),
                digits = c(0,2,2,2,2),
                display = c("s","fg","fg","fg","g"))
   print(t1,
@@ -1619,7 +1805,7 @@ breakPointDiscontinuous <- function(metric,
   modComparison <- anova(piecewise,nulMod)
   
   t2 <- xtable(modComparison,
-               caption = "ANOVA between model and null model to assess whether the segmented model fits better",
+               caption = paste("ANOVA between model and null model to assess whether the segmented model fits better",lobeTag),
                digits = c(0,0,2,2,2,2,2),
                display = c("s","d","fg","fg","fg","fg","fg"))
   
@@ -1817,11 +2003,11 @@ breakPointDiscontinuous <- function(metric,
 #                               breaks = breakList)
 #   
   # from line below: title=paste(metricName, "discontinuous breakpoint analysis", sep="\n"), 
-  p <- p + labs(title="", y=paste(metricName, "(z-score)"), x="Years from estimated age of onset") + theme(axis.title.x=element_blank(), legend.key=element_rect(fill="white", colour="white"))
+  p <- p + labs(title=lobeTag, y=paste(metricName, "(z-score)"), x="Years from estimated age of onset") + theme(axis.title.x=element_blank(), legend.key=element_rect(fill="white", colour="white"))
   p <- p + theme_bw() + theme(legend.key = element_rect(colour="#FFFFFF", fill = "#FFFFFF"))
   # p <- p + scale_fill_manual(name="Group",values=as.vector(colList))
   p <- p + scale_colour_manual(name="Group", values=as.vector(colList))
-  p <- p + theme(text=element_text(size=ts), plot.title=element_text(size=ts))
+  p <- p + theme(text=element_text(size=tsz), plot.title=element_text(size=tsz))
   
   plotFile = paste(paste(outFile,"DiscontBkpt",sep="_"),"png",sep=".")
   ggsave(plotFile,
