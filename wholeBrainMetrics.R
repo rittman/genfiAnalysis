@@ -2269,3 +2269,261 @@ scanSummaries <- function(scanField, scanTypeList, sp=NA, exclNeg=FALSE){
   }
   return(scanFieldSummary)
 }
+
+clinicalScores <- function(metric,
+                           metricName,
+                           cs,  # clinical score
+                           csName,  # clinical score name
+                           cols,
+                           sp, weighted=TRUE,
+                           outDir="wholeBrainResults",
+                           edgePC=3,
+                           h=15,w=15,s=4,tsz=12,ps=4,  # tsz = text size
+                           exclNeg=FALSE, # TRUE to exclude gene negative subjects
+                           family=FALSE,
+                           lobe=NA, # define the lobe of the brain to examine
+                           hubT=NA, # hub threshold
+                           csFile="clinicalScores.csv"
+                           ){
+  
+  # create output directory
+  dir.create(outDir, showWarnings = FALSE)
+  
+  # define log output file
+  if(weighted){
+    outFile = paste(outDir,
+                    paste(metric,cs,"wt",sep="_"),
+                    sep="/")
+    
+  } else {
+    outFile = paste(outDir,
+                    paste(metric,cs,sep="_"),
+                    sep="/")
+    
+  }
+  
+  logFile = paste(outFile, "logFile.tex", sep="_")
+  
+  # create log file
+  initiateLog(logFile, metricName)
+  
+  # import graph data
+  dF <- importGraphData(metric, weighted, edgePC, lobe=lobe, hubT=hubT)
+  
+  # apply spike percentage threshold
+  dF <- applySP(dF, sp)
+  
+  if(exclNeg){
+    dF <- dF[dF$GS!="gene negative",]
+    dF$GS <- factor(as.character(dF$GS), levels=c("gene carriers", "FTD"))
+  }
+  
+  colList = unlist(cols[levels(dF$GS)])
+  
+  # Summarise the patient data
+  ptSum = ddply(dF, .(gene), summarise,
+                "gene negative" = length(GS[GS=="gene negative"]),
+                "gene carriers" = length(GS[GS=="gene carriers"]),
+                "FTD"      = length(GS[GS=="FTD"])
+  )
+  ptSum <- data.frame(ptSum, Totals=rowSums(ptSum[,-1]))
+  tmpdF <- data.frame(gene="Totals",
+                      as.data.frame(matrix(colSums(ptSum[,-1]), nrow=1))
+  )
+  names(tmpdF) <- names(ptSum)
+  ptSum <- rbind(ptSum, tmpdF)
+  
+  t1 <- xtable(ptSum,
+               caption="Subjects included in the analysis",
+               digits = c(0,0,0,0,0,0),
+               display = c("s", "s", "d", "d", "d","d"))
+  
+  # stack data and take the mean if it is a node-wise measures
+  dF.wb <- stackIt(dF, metric)
+  
+  # add lobe information if necessary
+  if(!is.na(lobe)){
+    dF.wb <- data.frame(dF.wb, lobe=lobe)
+    lobeTag=lobe
+  } else {
+    lobeTag=""
+  }
+
+  if(!exclNeg){
+    dF.wb.summary = ddply(dF.wb, .(), summarise,
+                          "gene negative" = paste(sapply(mean(values[GS=="gene negative"], na.rm = TRUE), fn, a=2,b=3),
+                                                  paste("(", sapply(sd(values[GS=="gene negative"], na.rm = TRUE), fn, a=2,b=3),   ")", sep="")),
+                          "gene carriers" = paste(sapply(mean(values[GS=="gene carriers"], na.rm = TRUE), fn, a=2,b=3),
+                                                  paste("(", sapply(sd(values[GS=="gene carriers"], na.rm = TRUE),fn, a=2,b=3),   ")", sep="")),
+                          "FTD"      = paste(sapply(mean(values[GS=="FTD"], na.rm = TRUE),fn, a=2,b=3),
+                                             paste("(", sapply(sd(values[GS=="FTD"], na.rm = TRUE),fn, a=2,b=3),   ")", sep=""))
+    )
+    
+  } else {
+    dF.wb.summary = ddply(dF.wb, .(), summarise,
+                          "gene carriers" = paste(sapply(mean(values[GS=="gene carriers"], na.rm = TRUE), fn, a=2,b=3),
+                                                  paste("(", sapply(sd(values[GS=="gene carriers"], na.rm = TRUE),fn, a=2,b=3),   ")", sep="")),
+                          "FTD"      = paste(sapply(mean(values[GS=="FTD"], na.rm = TRUE),fn, a=2,b=3),
+                                             paste("(", sapply(sd(values[GS=="FTD"], na.rm = TRUE),fn, a=2,b=3),   ")", sep=""))
+    )
+    
+  }
+  
+  #   print(xtable(dF.wb.summary[,-1],
+  #                caption=paste("Mean and standard deviations for",metricName,"values in individuals")),
+  #         include.rownames=FALSE,
+  #         file=logFile,
+  #         append=TRUE)
+  
+  if(exclNeg){
+    dF.wb <- dF.wb[dF.wb$GS!="gene negative",]
+    dF.wb$GS <- as.factor(as.character(dF.wb$GS))
+  }
+  
+  # import clinical score data (includes TIV)
+  csdF = read.table("/home/tim/GENFI/clinicalScores.csv", sep=",", header = TRUE)
+  names(csdF)[which(names(csdF)=="BLINDID")] <- "wbic"
+  csdF <- csdF[,c("wbic", cs)]
+  names(csdF)[which(names(csdF)==cs)] = "score"
+  
+  # merge network and imaging data
+  dF.wb <- merge(dF.wb, csdF,
+              by = c("wbic"),
+              all.x=TRUE,
+              all.y=FALSE)
+  
+  # report the number of subjects with/without data
+  ptSum = ddply(dF.wb, .(gene), summarise,
+                "gene negative" = length(GS[GS=="gene negative"]),
+                "gene carriers" = length(GS[GS=="gene carriers"]),
+                "FTD"      = length(GS[GS=="FTD"])
+  )
+  
+  dF.wb <- dF.wb[complete.cases(dF.wb),]
+  ptSum.included = ddply(dF.wb, .(gene), summarise,
+                         "gene negative" = length(GS[GS=="gene negative"]),
+                         "gene carriers" = length(GS[GS=="gene carriers"]),
+                         "FTD"      = length(GS[GS=="FTD"])
+  )
+  
+  ptSum.excluded = cbind(gene=ptSum[,1], ptSum[,-1] - ptSum.included[,-1])
+  
+ # perform mixed effects analysis
+  # ANOVA of the differences
+  if(family){
+    mod <- lmer(values ~ score*GS + Age + (1 | gene) + (1 | site) + (1 | Family),
+                data=dF.wb,
+                REML=FALSE)
+  } else {
+    mod <- lmer(values ~ score*GS + Age + (1 | gene) + (1 | site),
+                data=dF.wb,
+                REML=FALSE)
+  }
+  
+  # print random effects of the model
+  mod.coef <- ranef(mod)
+  
+  t3 <- xtable(mod.coef$site,
+               digits=c(0,2),
+               display=c("s", "fg"),
+               caption = paste("Linear mixed effects model, site coefficients",lobeTag, csName))
+  
+  t4 <- xtable(mod.coef$gene,
+               digits=c(0,2),
+               display=c("s", "fg"),
+               caption = paste("Linear mixed effects model, gene coefficients",lobeTag, csName))
+  
+  if(family){
+    t5 <- xtable(mod.coef$Family,
+                 digits=c(0,2),
+                 display=c("s", "fg"),
+                 caption = paste("Linear mixed effects model, family coefficients",lobeTag, csName))
+  } else {
+    t5 = NA
+  }
+  
+  print(t3, file=logFile, append=TRUE)
+  print(t4, file=logFile, append=TRUE)
+  if(family){print(t3, file=logFile, append=TRUE)}
+  
+  # plot random effects
+  dF.plot.site <- data.frame(site = row.names(mod.coef$site),
+                             effect = mod.coef$site[[1]])
+  p1 <- ggplot(dF.plot.site, aes_string(x="site",y="effect"))
+  p1 <- p1 + geom_bar(stat="identity") + theme_bw() + ggtitle("Effect size of scan site")
+  
+  dF.plot.gene <- data.frame(gene = row.names(mod.coef$gene),
+                             effect = mod.coef$gene[[1]])
+  p2 <- ggplot(dF.plot.gene, aes_string(x="gene",y="effect"))
+  p2 <- p2 + geom_bar(stat="identity") + theme_bw() + ggtitle("Effect size of gene")
+  
+  if(family){
+    dF.plot.Family <- data.frame(Family = row.names(mod.coef$Family),
+                                 effect = mod.coef$Family[[1]])
+    p3 <- ggplot(dF.plot.Family, aes_string(x="Family",y="effect"))
+    p3 <- p3 + geom_bar(stat="identity") + theme_bw() + ggtitle("Effect size of family")
+    p3 <- p3 + theme(axis.text.x=element_blank())
+  } else {
+    p3 = NA
+  }
+  
+  # print variances
+  vc <- VarCorr(mod)
+  
+  t6 <- xtable(data.frame(vc),
+               display=c("s","s","s","s","g","fg"),
+               digits=c(0,0,0,0,2,2),
+               caption="Variance of random effects")
+  
+  print(t6,
+        file=logFile,
+        append=TRUE,
+        include.rownames=FALSE)
+  
+  t7 <- xtable(summary(mod)[[10]],
+               digits=c(0,2,2,1,2,2),
+               display=c("s","fg","f","f","f","g"),
+               caption=paste("Satterthwaite estimates of pvalues of linear mixed effects model for", metricName,lobeTag))
+  
+  print(t7,
+        file=logFile,
+        append=TRUE)
+  
+  # plot
+  p4 <- ggplot(data=dF.wb, aes_string(x="values", y="score", colour="GS"))
+  p4 <- p4 + geom_smooth(method="lm")
+  
+  p4 <- p4 + theme_bw()
+  p4 <- p4 + labs(x=csName, y=metricName)
+  p4 <- p4 + theme(text=element_text(size=tsz))
+  p4 <- p4 + scale_fill_manual(name="Group",values=as.vector(colList))
+  p4 <- p4 + theme(legend.position="none")
+  p4 <- p4 + labs(title=paste(csName,lobeTag))
+  
+  if(exclNeg){
+    outw = 2.5
+  } else {
+    outw = 3
+  }
+  
+  plotFile = paste(paste(outFile,"allgroups",sep="_"), "png", sep=".")
+  ggsave(plotFile,
+         scale=s,
+         dpi=600,
+         height=h, width=w,
+         units="mm")
+  
+  # return tables and plots
+  return(list(t1 = ptSum.included,
+              t2 = ptSum.excluded,
+              t3 = t3,
+              t4 = t4,
+              t5 = t5,
+              t6 = t6,
+              t7 = t7,
+              p1 = p1,
+              p2 = p2,
+              p3 = p3,
+              p4 = p4))
+}
+  
