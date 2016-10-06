@@ -9,6 +9,7 @@ library(car)
 library(xlsx)
 library(lmerTest)
 library(segmented)
+library(MASS)
 
 genfiDir = "/home/tim/GENFI/GENFI_camgrid_20150525/"
 
@@ -2408,16 +2409,23 @@ clinicalScores <- function(metric,
   
   ptSum.excluded = cbind(gene=ptSum[,1], ptSum[,-1] - ptSum.included[,-1])
   
- # perform mixed effects analysis
+
+  # perform mixed effects analysis
   # ANOVA of the differences
+  # set contrasts
+  mat = rbind(c(-1,1))
+  cMat = ginv(mat)
+  
   if(family){
-    mod <- lmer(values ~ score*GS + Age + (1 | gene) + (1 | site) + (1 | Family),
+    mod <- lmer(score ~ values*GS + Age + (1 | gene) + (1 | site) + (1 | Family),
                 data=dF.wb,
-                REML=FALSE)
+                REML=FALSE,
+                contrasts = list(GS=cMat))
   } else {
-    mod <- lmer(values ~ score*GS + Age + (1 | gene) + (1 | site),
+    mod <- lmer(score ~ values*GS + Age + (1 | gene) + (1 | site),
                 data=dF.wb,
-                REML=FALSE)
+                REML=FALSE,
+                contrasts = list(GS=cMat))
   }
   
   # print random effects of the model
@@ -2450,18 +2458,18 @@ clinicalScores <- function(metric,
   dF.plot.site <- data.frame(site = row.names(mod.coef$site),
                              effect = mod.coef$site[[1]])
   p1 <- ggplot(dF.plot.site, aes_string(x="site",y="effect"))
-  p1 <- p1 + geom_bar(stat="identity") + theme_bw() + ggtitle("Effect size of scan site")
+  p1 <- p1 + geom_bar(stat="identity") + theme_bw() + ggtitle(paste("Effect size of scan site", csName))
   
   dF.plot.gene <- data.frame(gene = row.names(mod.coef$gene),
                              effect = mod.coef$gene[[1]])
   p2 <- ggplot(dF.plot.gene, aes_string(x="gene",y="effect"))
-  p2 <- p2 + geom_bar(stat="identity") + theme_bw() + ggtitle("Effect size of gene")
+  p2 <- p2 + geom_bar(stat="identity") + theme_bw() + ggtitle(paste("Effect size of gene", csName))
   
   if(family){
     dF.plot.Family <- data.frame(Family = row.names(mod.coef$Family),
                                  effect = mod.coef$Family[[1]])
     p3 <- ggplot(dF.plot.Family, aes_string(x="Family",y="effect"))
-    p3 <- p3 + geom_bar(stat="identity") + theme_bw() + ggtitle("Effect size of family")
+    p3 <- p3 + geom_bar(stat="identity") + theme_bw() + ggtitle(paste("Effect size of family", csName))
     p3 <- p3 + theme(axis.text.x=element_blank())
   } else {
     p3 = NA
@@ -2473,7 +2481,7 @@ clinicalScores <- function(metric,
   t6 <- xtable(data.frame(vc),
                display=c("s","s","s","s","g","fg"),
                digits=c(0,0,0,0,2,2),
-               caption="Variance of random effects")
+               caption=paste("Variance of random effects", csName))
   
   print(t6,
         file=logFile,
@@ -2483,7 +2491,7 @@ clinicalScores <- function(metric,
   t7 <- xtable(summary(mod)[[10]],
                digits=c(0,2,2,1,2,2),
                display=c("s","fg","f","f","f","g"),
-               caption=paste("Satterthwaite estimates of pvalues of linear mixed effects model for", metricName,lobeTag))
+               caption=paste("Satterthwaite estimates of pvalues of linear mixed effects model for", csName, metricName,lobeTag))
   
   print(t7,
         file=logFile,
