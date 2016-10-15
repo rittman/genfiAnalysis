@@ -589,26 +589,47 @@ wholeBrainAnalysisMixedEffects <- function(metric,
   if(!is.na(lobe)){
     dF.wb <- data.frame(dF.wb, lobe=lobe)
   }
-  
+
   # Set contrasts if control group are to be excluded
   # NB this retains the control group in the estimation of the age effect and as a null regressor
   if(exclNeg){
-    cMat <- matrix(c(0,-1,1), nrow = 3)
+    geneNegVsgenePos = c(1,-1,-1)
+    carriersVsFTD = c(0,-1,1)
+    
+    cMat <- rbind(geneNegVsgenePos, carriersVsFTD)
+    nList = rownames(cMat)
+    cMat <- ginv(cMat)
+    colnames(cMat) = nList
+    
     rownames(cMat) <- levels(dF.wb$GS)
-    colnames(cMat) <- c("carriersVsFTD")
-    attr(dF.wb$GS, "contrasts") = cMat
+    # attr(dF.wb$GS, "contrasts") = ginv(cMat)
   }
-
+  
   # ANOVA of the differences
-  if(family){
-    mod <- lmer(values ~ GS + Age + (1 | gene) + (1 | site) + (1 | Family),
-                data=dF.wb,
-                REML=FALSE)
+  if(exclNeg){
+    if(family){
+      mod <- lmer(values ~ GS + Age + (1 | gene) + (1 | site) + (1 | Family),
+                  data=dF.wb,
+                  REML=FALSE,
+                  contrasts = list(GS=cMat))
+    } else {
+      mod <- lmer(values ~ GS + Age + (1 | gene) + (1 | site),
+                  data=dF.wb,
+                  REML=FALSE,
+                  contrasts = list(GS=cMat))
+    }
   } else {
-    mod <- lmer(values ~ GS + Age + (1 | gene) + (1 | site),
-                data=dF.wb,
-                REML=FALSE)
+    if(family){
+      mod <- lmer(values ~ GS + Age + (1 | gene) + (1 | site) + (1 | Family),
+                  data=dF.wb,
+                  REML=FALSE)
+    } else {
+      mod <- lmer(values ~ GS + Age + (1 | gene) + (1 | site),
+                  data=dF.wb,
+                  REML=FALSE)
+    }
   }
+  
   
   # print random effects of the model
   mod.coef <- ranef(mod)
@@ -1781,7 +1802,7 @@ breakPointDiscontinuous <- function(metric,
   
   # define breakpoint
   bkpt = 0.
-  
+
 #   piecewise <- lmer(values ~ aoo*(aoo<bkpt) + aoo*(aoo>bkpt) + (1 | gene) + (1 | site) + (1 | Family),
 #                     data=dF,
 #                     REML=FALSE)
@@ -2413,7 +2434,7 @@ clinicalScores <- function(metric,
   # perform mixed effects analysis
   # ANOVA of the differences
   # set contrasts
-  mat = rbind(c(-1,1))
+  mat = rbind(c(-1,1)) # FTD -1, gene negative 1
   cMat = ginv(mat)
   
   if(family){
