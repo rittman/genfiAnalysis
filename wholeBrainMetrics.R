@@ -2555,4 +2555,78 @@ clinicalScores <- function(metric,
               p3 = p3,
               p4 = p4))
 }
+
+
+hubDiff <- function(metric,sp,
+                    edgePC=3,
+                    excludeNegs=FALSE, # TRUE to exclude gene negative subjects
+                    hubT=NA # hub threshold
+                    ){
+  if(metric=="degree"){
+    weighted = TRUE
+  } else {
+    weighted = FALSE
+  }
   
+  # import graph data
+  dF.hubs <- importGraphData(metric, weighted, edgePC, lobe=lobe, hubT=hubT)
+  dF.nonhubs <- importGraphData(metric, weighted, edgePC, lobe=lobe, hubT=hubT, nonHubs = TRUE)
+  
+  # apply spike percentage threshold
+  dF.hubs <- applySP(dF.hubs, sp)
+  dF.nonhubs <- applySP(dF.nonhubs, sp)
+  
+  if(excludeNegs){
+    dF.hubs <- dF.hubs[dF.hubs$GS!="gene negative",]
+    dF.hubs$GS <- factor(as.character(dF.hubs$GS), levels=c("gene carriers", "FTD"))
+    
+    dF.nonhubs <- dF.nonhubs[dF.nonhubs$GS!="gene negative",]
+    dF.nonhubs$GS <- factor(as.character(dF.nonhubs$GS), levels=c("gene carriers", "FTD"))
+  }
+  
+  # stack data and take the mean if it is a node-wise measures
+  dF.hubs.wb <- stackIt(dF.hubs, metric)
+  dF.nonhubs.wb <- stackIt(dF.nonhubs, metric)
+  
+  if(!excludeNegs){
+    dF.hubs.wb.summary = ddply(dF.hubs.wb, .(), summarise,
+                          "gene negative" = sapply(mean(values[GS=="gene negative"], na.rm = TRUE), fn, a=2,b=3),
+                          "gene carriers" = sapply(mean(values[GS=="gene carriers"], na.rm = TRUE), fn, a=2,b=3),
+                          "FTD"      = sapply(mean(values[GS=="FTD"], na.rm = TRUE),fn, a=2,b=3)
+    )
+    
+    dF.nonhubs.wb.summary = ddply(dF.nonhubs.wb, .(), summarise,
+                               "gene negative" = sapply(mean(values[GS=="gene negative"], na.rm = TRUE), fn, a=2,b=3),
+                               "gene carriers" = sapply(mean(values[GS=="gene carriers"], na.rm = TRUE), fn, a=2,b=3),
+                               "FTD"      = sapply(mean(values[GS=="FTD"], na.rm = TRUE),fn, a=2,b=3)
+    )
+    
+  } else {
+    dF.hubs.wb.summary = ddply(dF.hubs.wb, .(), summarise,
+                          "gene carriers" = sapply(mean(values[GS=="gene carriers"], na.rm = TRUE), fn, a=2,b=3),
+                          "FTD"      = sapply(mean(values[GS=="FTD"], na.rm = TRUE),fn, a=2,b=3)
+    )
+    
+    dF.nonhubs.wb.summary = ddply(dF.nonhubs.wb, .(), summarise,
+                               "gene carriers" = sapply(mean(values[GS=="gene carriers"], na.rm = TRUE), fn, a=2,b=3),
+                               "FTD"      = sapply(mean(values[GS=="FTD"], na.rm = TRUE),fn, a=2,b=3)
+    )
+  }
+  
+  #   print(xtable(dF.wb.summary[,-1],
+  #                caption=paste("Mean and standard deviations for",metricName,"values in individuals")),
+  #         include.rownames=FALSE,
+  #         file=logFile,
+  #         append=TRUE)
+
+  if(excludeNegs){
+    return(list(geneCarriers = list(hub=dF.hubs.wb.summary[[2]], nonhub=dF.nonhubs.wb.summary[[2]], diff=dF.hubs.wb.summary[[2]] - dF.nonhubs.wb.summary[[2]]),
+                FTD = list(hub=dF.hubs.wb.summary[[3]], nonhub=dF.nonhubs.wb.summary[[3]], diff=dF.hubs.wb.summary[[3]] - dF.nonhubs.wb.summary[[3]])))
+  } else {
+    return(list(geneNeg = list(hub=dF.hubs.wb.summary[[2]], nonhub=dF.nonhubs.wb.summary[[2]], diff=dF.hubs.wb.summary[[2]] - dF.nonhubs.wb.summary[[2]]),
+                geneCarriers = list(hub=dF.hubs.wb.summary[[3]], nonhub=dF.nonhubs.wb.summary[[3]], diff=dF.hubs.wb.summary[[3]] - dF.nonhubs.wb.summary[[3]]),
+                FTD = list(hub=dF.hubs.wb.summary[[4]], nonhub=dF.nonhubs.wb.summary[[4]], diff=dF.hubs.wb.summary[[4]] - dF.nonhubs.wb.summary[[4]])))
+  }
+  
+  
+}
