@@ -2430,23 +2430,31 @@ clinicalScores <- function(metric,
   
   ptSum.excluded = cbind(gene=ptSum[,1], ptSum[,-1] - ptSum.included[,-1])
   
-
+  # demean and rescale values and clinical scores
+  dF.wb$values <- (dF.wb$values - mean(dF.wb$values)) / sd(dF.wb$values)
+  dF.wb$score <- (dF.wb$score - mean(dF.wb$score)) / sd(dF.wb$values)
+  dF.wb$Age <- (dF.wb$Age - mean(dF.wb$Age)) / sd(dF.wb$Age)
+  
   # perform mixed effects analysis
   # ANOVA of the differences
   # set contrasts
-  mat = rbind(c(-1,1)) # FTD -1, gene negative 1
-  cMat = ginv(mat)
-  
+#   mat = rbind(c(-1,1), c(0,1), c(1,0)) # FTD -1, gene negative 1
+#   cMat = ginv(mat)
+#   
+#   colnames(cMat) = c("FTD vs gene carriers", "gene carriers", "FTD")
+#   rownames(cMat) = levels(dF.wb$GS)
+#   
+#   contrasts(dF.wb$GS) = contr.helmert(dF.wb$GS,1)
+#   
   if(family){
     mod <- lmer(score ~ values*GS + Age + (1 | gene) + (1 | site) + (1 | Family),
                 data=dF.wb,
-                REML=FALSE,
-                contrasts = list(GS=cMat))
+                REML=FALSE)
   } else {
     mod <- lmer(score ~ values*GS + Age + (1 | gene) + (1 | site),
                 data=dF.wb,
-                REML=FALSE,
-                contrasts = list(GS=cMat))
+                REML=FALSE)
+                #contrasts = list(GS=contr.helmert))
   }
   
   # print random effects of the model
@@ -2518,6 +2526,56 @@ clinicalScores <- function(metric,
         file=logFile,
         append=TRUE)
   
+  # now repeat with model excluding the interaction between genetic status to see if there is a correlation between graph and clinical measures
+  if(family){
+    mod2 <- lmer(score ~ values + GS + Age + (1 | gene) + (1 | site) + (1 | Family),
+                data=dF.wb,
+                REML=FALSE)
+  } else {
+    mod2 <- lmer(score ~ values + GS + Age + (1 | gene) + (1 | site),
+                data=dF.wb,
+                REML=FALSE)
+  }
+  
+  # print random effects of the model
+  mod2.coef <- ranef(mod2)
+  
+  t8 <- xtable(mod2.coef$site,
+               digits=c(0,2),
+               display=c("s", "fg"),
+               caption = paste("Linear mixed effects model excluding gene interaction term, site coefficients",lobeTag, metricName, csName))
+  
+  t9 <- xtable(mod2.coef$gene,
+               digits=c(0,2),
+               display=c("s", "fg"),
+               caption = paste("Linear mixed effects model excluding gene interaction term, gene coefficients",lobeTag, metricName, csName))
+  
+  if(family){
+    t10 <- xtable(mod2.coef$Family,
+                 digits=c(0,2),
+                 display=c("s", "fg"),
+                 caption = paste("Linear mixed effects model excluding gene interaction term, family coefficients",lobeTag, metricName, csName))
+  } else {
+    t10 = NA
+  }
+  
+  print(t8, file=logFile, append=TRUE)
+  print(t9, file=logFile, append=TRUE)
+  if(family){print(t8, file=logFile, append=TRUE)}
+  
+  # now perform model comparison to see whether including the interaction term adds to the model
+  modComparison <- anova(mod, mod2)
+  
+  t11 <- xtable(modComparison,
+               caption = paste("Model comparison including (mod) and excluding (mod2) gene interaction term",csName, metricName,lobeTag),
+               digits = c(0,0,2,2,2,2,2,2,2),
+               display = c("s","d","fg","fg","fg","fg","d","fg","fg"))
+  
+  print(t11,
+        include.rownames=TRUE,
+        file=logFile,
+        append=TRUE)
+  
   # plot
   p4 <- ggplot(data=dF.wb, aes_string(x="values", y="score", colour="GS"))
   p4 <- p4 + geom_smooth(method="lm")
@@ -2550,6 +2608,10 @@ clinicalScores <- function(metric,
               t5 = t5,
               t6 = t6,
               t7 = t7,
+              t8 = t8,
+              t9 = t9,
+              t10= t10,
+              t11= t11,
               p1 = p1,
               p2 = p2,
               p3 = p3,
