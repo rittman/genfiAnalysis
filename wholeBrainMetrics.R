@@ -2563,15 +2563,37 @@ clinicalScores <- function(metric,
   print(t9, file=logFile, append=TRUE)
   if(family){print(t8, file=logFile, append=TRUE)}
   
+  # print variances
+  vc <- VarCorr(mod2)
+  
+  t11 <- xtable(data.frame(vc),
+               display=c("s","s","s","s","g","fg"),
+               digits=c(0,0,0,0,2,2),
+               caption=paste("Variance of random effects without gene/value interaction", csName))
+  
+  print(t11,
+        file=logFile,
+        append=TRUE,
+        include.rownames=FALSE)
+  
+  t12 <- xtable(summary(mod2)[[10]],
+               digits=c(0,2,2,1,2,2),
+               display=c("s","fg","f","f","f","g"),
+               caption=paste("Satterthwaite estimates of pvalues of linear mixed effects model without gene/value interaction for", csName, metricName,lobeTag))
+  
+  print(t12,
+        file=logFile,
+        append=TRUE)
+  
   # now perform model comparison to see whether including the interaction term adds to the model
   modComparison <- anova(mod, mod2)
   
-  t11 <- xtable(modComparison,
+  t13 <- xtable(modComparison,
                caption = paste("Model comparison including (mod) and excluding (mod2) gene interaction term",csName, metricName,lobeTag),
                digits = c(0,0,2,2,2,2,2,2,2),
                display = c("s","d","fg","fg","fg","fg","d","fg","fg"))
   
-  print(t11,
+  print(t13,
         include.rownames=TRUE,
         file=logFile,
         append=TRUE)
@@ -2612,6 +2634,8 @@ clinicalScores <- function(metric,
               t9 = t9,
               t10= t10,
               t11= t11,
+              t12= t12,
+              t13= t13,
               p1 = p1,
               p2 = p2,
               p3 = p3,
