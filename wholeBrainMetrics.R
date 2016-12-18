@@ -262,7 +262,14 @@ wholeBrainAnalysis <- function(metric,
     
   }
   
-  logFile = paste(outFile, "logFile.tex", sep="_")
+  # create label for legends according to lobe
+  if(!is.na(lobe)){
+    lobeTag=lobe
+  } else {
+    lobeTag=""
+  }
+  
+  logFile = paste(paste(outFile, lobeTag, sep=""), "logFile.tex", sep="_")
   
   # create log file
   initiateLog(logFile, metricName)
@@ -485,7 +492,7 @@ wholeBrainAnalysis <- function(metric,
     outw = 3
   }
   
-  plotFile = paste(paste(outFile,"allgroups",sep="_"), "png", sep=".")
+  plotFile = paste(paste(paste(outFile, lobeTag, sep=""),"allgroups",sep="_"), "png", sep=".")
   ggsave(plotFile,
          scale=s,
          dpi=600,
@@ -523,7 +530,7 @@ wholeBrainAnalysis <- function(metric,
   pg <- pg + theme(axis.title.x=element_blank(), axis.title.y=element_blank())  #
   pg <- pg + theme(text=element_text(size=tsz))
   
-  plotFile = paste(paste(outFile,"byGene",sep="_"), "png", sep=".")
+  plotFile = paste(paste(paste(outFile, lobeTag, sep=""),"byGene",sep="_"), "png", sep=".")
   ggsave(plotFile,
          scale=s,
          dpi=600,
@@ -1000,7 +1007,7 @@ graphTimeComparison <- function(metric,
                digits=c(0,2,2,2,2),
                display=c("s","fg","fg","fg","g"))
   
-  p1 <- p + geom_smooth(method="lm")
+  p1 <- p + geom_smooth(method="lm") # plot the simple linear model
   coeffs <- summary(lm.all)[["coefficients"]]
   xMin = min(dF[dF$GS=="gene carriers","aoo"])
   xMax = max(dF[dF$GS=="gene carriers","aoo"])
@@ -1013,19 +1020,19 @@ graphTimeComparison <- function(metric,
   yMin.FTD = xMin.FTD*coeffs["aoo:GSFTD","Estimate"] + xMin.FTD*coeffs["aoo","Estimate"] + coeffs["(Intercept)","Estimate"] + coeffs["GSFTD","Estimate"]
   yMax.FTD = xMax.FTD*coeffs["aoo:GSFTD","Estimate"] + xMax.FTD*coeffs["aoo","Estimate"] + coeffs["(Intercept)","Estimate"] + coeffs["GSFTD","Estimate"]
  
-  p1 <- p1 + geom_segment(x=xMin,
-                         xend=xMax,
-                         y=yMin,
-                         yend=yMax,
-                         size=1.5,
-                         colour=cols["gene carriers"])
-  
-  p1 <- p1 + geom_segment(x=xMin.FTD,
-                         xend=xMax.FTD,
-                         y=yMin.FTD,
-                         yend=yMax.FTD,
-                         size=1.5,
-                         colour=cols["FTD"])
+#   p1 <- p1 + geom_segment(x=xMin,
+#                          xend=xMax,
+#                          y=yMin,
+#                          yend=yMax,
+#                          size=1.5,
+#                          colour=cols["gene carriers"])
+#   
+#   p1 <- p1 + geom_segment(x=xMin.FTD,
+#                          xend=xMax.FTD,
+#                          y=yMin.FTD,
+#                          yend=yMax.FTD,
+#                          size=1.5,
+#                          colour=cols["FTD"])
 
   yMin.scale = min(yMin,yMin.FTD,yMax,yMax.FTD)
   yMax.scale = max(yMax,yMax.FTD,yMin,yMin.FTD)
@@ -1037,7 +1044,7 @@ graphTimeComparison <- function(metric,
   # from line below: paste(metricName, "linear regression", sep="\n")
   p1 <- p1 + labs(title=lobeTag, y=metricName, x="Estimated age of onset") + theme(axis.title.x=element_blank(), legend.key=element_rect(fill="white", colour="white"))
   p1 <- p1 + theme_bw() + theme(legend.key = element_rect(colour="#FFFFFF", fill = "#FFFFFF"))
-  p1 <- p1 + theme(text=element_text(size=tsz), plot.title=element_text(size=tsz))
+  p1 <- p1 + theme(text=element_text(size=tsz)) #, plot.title=element_text(size=tsz))
   plotOutName = paste(outFile,"png",sep=".")
 
   ggsave(plotOutName,
@@ -2031,7 +2038,7 @@ breakPointDiscontinuous <- function(metric,
   p <- p + scale_colour_manual(name="Group", values=as.vector(colList))
   p <- p + theme(text=element_text(size=tsz), plot.title=element_text(size=tsz))
   
-  plotFile = paste(paste(outFile,"DiscontBkpt",sep="_"),"png",sep=".")
+  plotFile = paste(paste(outFile,"DiscontBkpt", lobeTag,sep="_"),"png",sep=".")
   ggsave(plotFile,
          plot=p,
          scale=s,
