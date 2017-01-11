@@ -790,11 +790,11 @@ wholeBrainAnalysisMixedEffectsHubComparison <- function(metric,
   
   # ANOVA of the differences
   if(family){
-    mod <- lmer(values ~ GS*hub + Age + (1 | wbic) + (1 | gene) + (1 | site) + (1 | Family) + (1 | hub:wbic),
+    mod <- lmer(values ~ GS*hub + Age + (1 | wbic) + (1 | gene) + (1 | site) + (1 | Family),
                 data=dF.wb,
                 REML=FALSE)
   } else {
-    mod <- lmer(values ~ GS*hub + Age + (1 | wbic) + (1 | hub) + (1 | gene) + (1 | site),
+    mod <- lmer(values ~ GS*hub + Age + (1 | wbic) + (1 | gene) + (1 | site),
                 data=dF.wb,
                 REML=FALSE)
   }
@@ -876,9 +876,201 @@ wholeBrainAnalysisMixedEffectsHubComparison <- function(metric,
         file=logFile,
         append=TRUE)
   
-  return(list(t1, t2, t3, t4, t5, p1, p2, p3, p4))
+  # now do the same for each gene group to assess differences between hubs within a gene group
+  dF.wb.FTD <- dF.wb[dF.wb$GS=="FTD",]
+  
+  # ANOVA of the differences
+  if(family){
+    mod <- lmer(values ~ hub + Age + (1 | wbic) + (1 | gene) + (1 | site) + (1 | Family), # + (1 | hub:wbic) - can't remember/understand why this term was included
+                data=dF.wb.FTD,
+                REML=FALSE)
+  } else {
+    mod <- lmer(values ~ hub + Age + (1 | wbic) + (1 | gene) + (1 | site),
+                data=dF.wb.FTD,
+                REML=FALSE)
+  }
+  
+  # print random effects of the model
+  mod.coef <- ranef(mod)
+  
+  # print random effects of the model
+  mod.coef <- ranef(mod)
+  
+  t6 <- xtable(mod.coef$site,
+               digits=c(0,2),
+               display=c("s", "fg"),
+               caption = "FTD only linear mixed effects model, site coefficients")
+  
+  t7 <- xtable(mod.coef$gene,
+               digits=c(0,2),
+               display=c("s", "fg"),
+               caption = "FTD only linear mixed effects model, gene coefficients")
+  
+  if(family){
+    t8 <- xtable(mod.coef$Family,
+                 digits=c(0,2),
+                 display=c("s", "fg"),
+                 caption = "FTD only linear mixed effects model, family coefficients")
+  } else {
+    t8 = NA
+  }
+  
+  print(t6, file=logFile, append=TRUE)
+  print(t7, file=logFile, append=TRUE)
+  if(family){print(t8, file=logFile, append=TRUE)}
+  
+  # plot random effects
+  dF.plot.site <- data.frame(site = row.names(mod.coef$site),
+                             effect = mod.coef$site[[1]])
+  p5 <- ggplot(dF.plot.site, aes_string(x="site",y="effect"))
+  p5 <- p5 + geom_bar(stat="identity") + theme_bw() + ggtitle("FTD only effect size of scan site")
+  
+  dF.plot.gene <- data.frame(gene = row.names(mod.coef$gene),
+                             effect = mod.coef$gene[[1]])
+  p6 <- ggplot(dF.plot.gene, aes_string(x="gene",y="effect"))
+  p6 <- p6 + geom_bar(stat="identity") + theme_bw() + ggtitle("FTD only effect size of gene")
+  
+  if(family){
+    dF.plot.Family <- data.frame(Family = row.names(mod.coef$Family),
+                                 effect = mod.coef$Family[[1]])
+    p7 <- ggplot(dF.plot.Family, aes_string(x="Family",y="effect"))
+    p7 <- p7 + geom_bar(stat="identity") + theme_bw() + ggtitle("FTD only effect size of family")
+    p7 <- p7 + theme(axis.text.x=element_blank())
+  } else {
+    p7 = NA
+  }
+  
+  # print variances
+  vc <- VarCorr(mod)
+  
+  t9 <- xtable(data.frame(vc),
+               display=c("s","s","s","s","g","fg"),
+               digits=c(0,0,0,0,2,2),
+               caption="FTD only variance of random effects")
+  
+  print(t9,
+        file=logFile,
+        append=TRUE,
+        include.rownames=FALSE)
+  
+  #   # Type II ANOVA
+  #   mod.avo <- Anova(mod, type="II")
+  #   
+  #   t5 <- xtable(mod.avo,
+  #                digits=c(0,1,1,2),
+  #                display=c("s","f","d","fg"),
+  #                caption=paste("ANOVA of linear mixed effects model for", metricName))
+  t10 <- xtable(summary(mod)[[10]],
+               digits=c(0,2,2,1,2,2),
+               display=c("s","fg","f","f","f","g"),
+               caption=paste("FTD only Satterthwaite estimates of pvalues of linear mixed effects model for", metricName))
+  
+  
+  print(t10,
+        file=logFile,
+        append=TRUE)
+  
+  # now do the same for each gene group to assess differences between hubs within a gene group
+  dF.gc <- dF.wb[dF.wb$GS=="gene carriers",]
+  
+  # ANOVA of the differences
+  if(family){
+    mod <- lmer(values ~ hub + Age + (1 | wbic) + (1 | gene) + (1 | site) + (1 | Family), # + (1 | hub:wbic) - can't remember/understand why this term was included
+                data=dF.gc,
+                REML=FALSE)
+  } else {
+    mod <- lmer(values ~ hub + Age + (1 | wbic) + (1 | gene) + (1 | site),
+                data=dF.gc,
+                REML=FALSE)
+  }
+  
+  # print random effects of the model
+  mod.coef <- ranef(mod)
+  
+  # print random effects of the model
+  mod.coef <- ranef(mod)
+  
+  t11 <- xtable(mod.coef$site,
+               digits=c(0,2),
+               display=c("s", "fg"),
+               caption = "Gene carriers only linear mixed effects model, site coefficients")
+  
+  t12 <- xtable(mod.coef$gene,
+               digits=c(0,2),
+               display=c("s", "fg"),
+               caption = "Gene carriers only linear mixed effects model, gene coefficients")
+  
+  if(family){
+    t13 <- xtable(mod.coef$Family,
+                 digits=c(0,2),
+                 display=c("s", "fg"),
+                 caption = "Gene carriers only linear mixed effects model, family coefficients")
+  } else {
+    t13 = NA
+  }
+  
+  print(t11, file=logFile, append=TRUE)
+  print(t12, file=logFile, append=TRUE)
+  if(family){print(t13, file=logFile, append=TRUE)}
+  
+  # plot random effects
+  dF.plot.site <- data.frame(site = row.names(mod.coef$site),
+                             effect = mod.coef$site[[1]])
+  p8 <- ggplot(dF.plot.site, aes_string(x="site",y="effect"))
+  p8 <- p8 + geom_bar(stat="identity") + theme_bw() + ggtitle("Gene carriers only effect size of scan site")
+  
+  dF.plot.gene <- data.frame(gene = row.names(mod.coef$gene),
+                             effect = mod.coef$gene[[1]])
+  p9 <- ggplot(dF.plot.gene, aes_string(x="gene",y="effect"))
+  p9 <- p9 + geom_bar(stat="identity") + theme_bw() + ggtitle("Gene carriers only effect size of gene")
+  
+  if(family){
+    dF.plot.Family <- data.frame(Family = row.names(mod.coef$Family),
+                                 effect = mod.coef$Family[[1]])
+    p10 <- ggplot(dF.plot.Family, aes_string(x="Family",y="effect"))
+    p10 <- p10 + geom_bar(stat="identity") + theme_bw() + ggtitle("Effect size of family")
+    p10 <- p10 + theme(axis.text.x=element_blank())
+  } else {
+    p10 = NA
+  }
+  
+  # print variances
+  vc <- VarCorr(mod)
+  
+  t14 <- xtable(data.frame(vc),
+               display=c("s","s","s","s","g","fg"),
+               digits=c(0,0,0,0,2,2),
+               caption="Gene carriers only variance of random effects")
+  
+  print(t14,
+        file=logFile,
+        append=TRUE,
+        include.rownames=FALSE)
+  
+  #   # Type II ANOVA
+  #   mod.avo <- Anova(mod, type="II")
+  #   
+  #   t5 <- xtable(mod.avo,
+  #                digits=c(0,1,1,2),
+  #                display=c("s","f","d","fg"),
+  #                caption=paste("ANOVA of linear mixed effects model for", metricName))
+  t15 <- xtable(summary(mod)[[10]],
+                digits=c(0,2,2,1,2,2),
+                display=c("s","fg","f","f","f","g"),
+                caption=paste("Gene carriers only Satterthwaite estimates of pvalues of linear mixed effects model for", metricName))
+  
+  
+  print(t10,
+        file=logFile,
+        append=TRUE)
+  
+  return(list(t1, t2, t3, t4, t5, # ineraction between FTD and gene carriers
+              t6, t7, t8, t9, t10, # FTD hubs vs non-hubs
+              t11, t12, t13, t14, t15, # gene carriers hubs vs non-hubs
+              p1, p2, p3, p4,
+              p5, p6, p7, # FTD hubs vs non-hubs
+              p8, p9, p10)) # gene carriers hubs vs non-hubs
 }
-
 
 graphTimeComparison <- function(metric,
                                 metricName,
@@ -1960,6 +2152,27 @@ breakPointDiscontinuous <- function(metric,
                        data=dF[dF$aoo>0.,],
                        fill=colList["FTD"], alpha=0.5)
   
+  # add significance indicator
+  pVal = summary(piecewise)[[4]][4,4]
+  if(pVal< 0.05){
+    # set the number if asterixis
+    if(pVal<0.001){
+      sigInd = "****"
+    } else if(pVal < 0.001) {
+      sigInd = "***"
+    } else if(pVal < 0.01) {
+      sigInd = "**"
+    } else {
+      sigInd = "*"
+    }
+    
+    # get the maximum y values
+    yvalMax = max(dF$values.norm)
+    
+    p <- p + annotate("text", x=0, y=yvalMax, label=sigInd, colour="black", size=8)
+
+  }
+  
 #   p <- p + geom_segment(x=min(dF$aoo),
 #                         xend=0,
 #                         y=yMin.lower,
@@ -2038,6 +2251,9 @@ breakPointDiscontinuous <- function(metric,
   p <- p + scale_colour_manual(name="Group", values=as.vector(colList))
   p <- p + theme(text=element_text(size=tsz), plot.title=element_text(size=tsz))
   
+  if(!is.na(lobe)){
+    w=h
+  }
   plotFile = paste(paste(outFile,"DiscontBkpt", lobeTag,sep="_"),"png",sep=".")
   ggsave(plotFile,
          plot=p,
@@ -2653,14 +2869,15 @@ clinicalScores <- function(metric,
 hubDiff <- function(metric,sp,
                     edgePC=3,
                     excludeNegs=FALSE, # TRUE to exclude gene negative subjects
-                    hubT=NA # hub threshold
+                    hubT=NA, # hub threshold
+                    lobe=NA
                     ){
   if(metric=="degree"){
     weighted = TRUE
   } else {
     weighted = FALSE
   }
-  
+
   # import graph data
   dF.hubs <- importGraphData(metric, weighted, edgePC, lobe=lobe, hubT=hubT)
   dF.nonhubs <- importGraphData(metric, weighted, edgePC, lobe=lobe, hubT=hubT, nonHubs = TRUE)
@@ -2720,6 +2937,293 @@ hubDiff <- function(metric,sp,
                 geneCarriers = list(hub=dF.hubs.wb.summary[[3]], nonhub=dF.nonhubs.wb.summary[[3]], diff=dF.hubs.wb.summary[[3]] - dF.nonhubs.wb.summary[[3]]),
                 FTD = list(hub=dF.hubs.wb.summary[[4]], nonhub=dF.nonhubs.wb.summary[[4]], diff=dF.hubs.wb.summary[[4]] - dF.nonhubs.wb.summary[[4]])))
   }
+}
+
+graphTimeComparisonCarriersOnly <- function(metric,
+                                            metricName,
+                                            sp, # spike percentage
+                                            cols,
+                                            weighted=TRUE, # is this a weighted metric?
+                                            outDir="wholeBrainVsAOOResults",
+                                            edgePC=3,
+                                            h=30,w=45,s=4,tsz=12,ps=4,
+                                            exclNeg=TRUE,
+                                            family=FALSE,
+                                            lobe=NA,
+                                            hubT=NA){
+  # create output directory
+  dir.create(outDir, showWarnings = FALSE)
   
+  # define log output file
+  if(weighted){
+    outFile = paste(outDir,
+                    paste(metric,"wt","geneCarriers",sep="_"),
+                    sep="/")
+    
+  } else {
+    outFile = paste(outDir,
+                    paste(metric,"geneCarriers",sep="_"),
+                    sep="/")
+  }
+  logFile = paste(outFile, "logFile.tex", sep="_")
   
+  # create label for legends according to lobe
+  if(!is.na(lobe)){
+    lobeTag=lobe
+  } else {
+    lobeTag=""
+  }
+  
+  # create log file
+  initiateLog(logFile, metricName)
+  
+  ### function to plot and analyse the relationship between graph metrics and expected time to disease onset
+  # import graph metric data
+  dF <- importGraphData(metric, weighted, edgePC, lobe=lobe, hubT=hubT)
+  
+  # filter by spike percentage
+  dF <- applySP(dF, sp)
+  
+  # stack the data and take mean if a nodewise measure
+  dF <- stackIt(dF, metric)
+  
+  # get age of onset data
+  genfiData <- read.table("/home/tim/GENFI/genfi_Subjects_sjones_1_22_2015_17_47_47_restructure_summary.csv",
+                          sep="\t",
+                          header = TRUE)
+  
+  dF.aoo <- data.frame(wbic=genfiData$Subject,
+                       aoo=genfiData$Yrs.from.AV_AAO)
+  
+  # merge age of onset data
+  dF <- merge(dF, dF.aoo, by="wbic")
+  dF <- unique(dF) # remove duplicates that may have sneaked in
+  
+  # add lobe information if necessary
+  if(!is.na(lobe)){
+    dF <- data.frame(dF, lobe=lobe)
+  }
+  
+  dF <- dF[dF$GS=="gene carriers",]
+  outFile = paste(outFile, "GeneCarriers", sep="")
+  dF$GS <- factor(as.character(dF$GS), levels=c("gene carriers"))
+  
+  # simple linear with all groups combined
+  lm.simpLM <- lm(values~aoo, data=dF)
+  
+  if(family){
+    mod <- lmer(values ~ aoo + (1 | gene) + (1 | site) + (1 | Family),
+                data=dF,
+                REML=FALSE)
+  } else {
+    mod <- lmer(values ~ aoo + (1 | gene) + (1 | site),
+                data=dF,
+                REML=FALSE)
+  }
+  
+  ## plot random effects
+  mod.coef <- ranef(mod)
+  dF.plot.site <- data.frame(site = row.names(mod.coef$site),
+                             effect = mod.coef$site[[1]])
+  p1 <- ggplot(dF.plot.site, aes_string(x="site",y="effect"))
+  p1 <- p1 + geom_bar(stat="identity") + theme_bw() + ggtitle("Effect size of scan site")
+  
+  dF.plot.gene <- data.frame(gene = row.names(mod.coef$gene),
+                             effect = mod.coef$gene[[1]])
+  p2 <- ggplot(dF.plot.gene, aes_string(x="gene",y="effect"))
+  p2 <- p2 + geom_bar(stat="identity") + theme_bw() + ggtitle("Effect size of gene")
+  
+  if(family){
+    dF.plot.Family <- data.frame(Family = row.names(mod.coef$Family),
+                                 effect = mod.coef$Family[[1]])
+    p3 <- ggplot(dF.plot.Family, aes_string(x="Family",y="effect"))
+    p3 <- p3 + geom_bar(stat="identity") + theme_bw() + ggtitle("Effect size of family")
+    p3 <- p3 + theme(axis.text.x=element_blank())
+  } else {
+    p3 = NA
+  }
+  
+  t1 <- xtable(summary(mod)[["coefficients"]],
+               caption=paste("Linear mixed effects model, fixed effects", lobeTag),
+               digits=c(0,2,2,2,2,2),
+               display=c("s","fg","fg","fg","fg","fg"))
+  
+  print(t1,
+        include.rownames=TRUE,
+        file=logFile,
+        append=TRUE)
+  
+  t2 <- xtable(data.frame(StdDev = c(attributes(VarCorr(mod)[[1]])[["stddev"]],
+                                     attributes(VarCorr(mod)[[2]])[["stddev"]],
+                                     attributes(VarCorr(mod))[["sc"]]),
+                          row.names = c("Family", "Site", "Residual")),                          
+               caption=paste("Linear mixed effects model, random effects", lobeTag),
+               digits=c(0,2),
+               display=c("s","fg"))
+  
+  print(t2,
+        include.rownames=TRUE,
+        file=logFile,
+        append=TRUE)
+  
+  # print the variance and standard deviation of the random effects
+  vc <- VarCorr(mod)
+  
+  t3 <- xtable(data.frame(vc),
+               display=c("s","s","s","s","g","fg"),
+               digits=c(0,0,0,0,2,2),
+               caption=paste("Variance of random effects", lobeTag))
+  
+  print(t3,
+        file=logFile,
+        append=TRUE,
+        include.rownames=FALSE)
+  
+  return(list(t1, t2, t3,
+              p1, p2, p3))
+}
+
+graphTimeComparisonPresymptomatic <- function(metric,
+                                            metricName,
+                                            sp, # spike percentage
+                                            cols,
+                                            weighted=TRUE, # is this a weighted metric?
+                                            outDir="wholeBrainVsAOOResults",
+                                            edgePC=3,
+                                            h=30,w=45,s=4,tsz=12,ps=4,
+                                            exclNeg=TRUE,
+                                            family=FALSE,
+                                            lobe=NA,
+                                            hubT=NA){
+  # create output directory
+  dir.create(outDir, showWarnings = FALSE)
+  
+  # define log output file
+  if(weighted){
+    outFile = paste(outDir,
+                    paste(metric,"wt","Presymptomatic",sep="_"),
+                    sep="/")
+    
+  } else {
+    outFile = paste(outDir,
+                    paste(metric,"Presymptomatic",sep="_"),
+                    sep="/")
+  }
+  logFile = paste(outFile, "logFile.tex", sep="_")
+  
+  # create label for legends according to lobe
+  if(!is.na(lobe)){
+    lobeTag=lobe
+  } else {
+    lobeTag=""
+  }
+  
+  # create log file
+  initiateLog(logFile, metricName)
+  
+  ### function to plot and analyse the relationship between graph metrics and expected time to disease onset
+  # import graph metric data
+  dF <- importGraphData(metric, weighted, edgePC, lobe=lobe, hubT=hubT)
+  
+  # filter by spike percentage
+  dF <- applySP(dF, sp)
+  
+  # stack the data and take mean if a nodewise measure
+  dF <- stackIt(dF, metric)
+  
+  # get age of onset data
+  genfiData <- read.table("/home/tim/GENFI/genfi_Subjects_sjones_1_22_2015_17_47_47_restructure_summary.csv",
+                          sep="\t",
+                          header = TRUE)
+  
+  dF.aoo <- data.frame(wbic=genfiData$Subject,
+                       aoo=genfiData$Yrs.from.AV_AAO)
+  
+  # merge age of onset data
+  dF <- merge(dF, dF.aoo, by="wbic")
+  dF <- unique(dF) # remove duplicates that may have sneaked in
+  
+  # add lobe information if necessary
+  if(!is.na(lobe)){
+    dF <- data.frame(dF, lobe=lobe)
+  }
+  
+  dF <- dF[dF$GS=="gene carriers",]
+  dF <- dF[dF$aoo<=0,]
+  outFile = paste(outFile, "Presymptomatic", sep="")
+  dF$GS <- factor(as.character(dF$GS), levels=c("gene carriers", "FTD"))
+  
+  # simple linear with all groups combined
+  lm.simpLM <- lm(values~aoo, data=dF)
+  
+  if(family){
+    mod <- lmer(values ~ aoo + (1 | gene) + (1 | site) + (1 | Family),
+                data=dF,
+                REML=FALSE)
+  } else {
+    mod <- lmer(values ~ aoo + (1 | gene) + (1 | site),
+                data=dF,
+                REML=FALSE)
+  }
+  
+  ## plot random effects
+  mod.coef <- ranef(mod)
+  dF.plot.site <- data.frame(site = row.names(mod.coef$site),
+                             effect = mod.coef$site[[1]])
+  p1 <- ggplot(dF.plot.site, aes_string(x="site",y="effect"))
+  p1 <- p1 + geom_bar(stat="identity") + theme_bw() + ggtitle("Effect size of scan site")
+  
+  dF.plot.gene <- data.frame(gene = row.names(mod.coef$gene),
+                             effect = mod.coef$gene[[1]])
+  p2 <- ggplot(dF.plot.gene, aes_string(x="gene",y="effect"))
+  p2 <- p2 + geom_bar(stat="identity") + theme_bw() + ggtitle("Effect size of gene")
+  
+  if(family){
+    dF.plot.Family <- data.frame(Family = row.names(mod.coef$Family),
+                                 effect = mod.coef$Family[[1]])
+    p3 <- ggplot(dF.plot.Family, aes_string(x="Family",y="effect"))
+    p3 <- p3 + geom_bar(stat="identity") + theme_bw() + ggtitle("Effect size of family")
+    p3 <- p3 + theme(axis.text.x=element_blank())
+  } else {
+    p3 = NA
+  }
+  
+  t1 <- xtable(summary(mod)[["coefficients"]],
+               caption=paste("Linear mixed effects model, fixed effects", lobeTag),
+               digits=c(0,2,2,2,2,2),
+               display=c("s","fg","fg","fg","fg","fg"))
+  
+  print(t1,
+        include.rownames=TRUE,
+        file=logFile,
+        append=TRUE)
+  
+  t2 <- xtable(data.frame(StdDev = c(attributes(VarCorr(mod)[[1]])[["stddev"]],
+                                     attributes(VarCorr(mod)[[2]])[["stddev"]],
+                                     attributes(VarCorr(mod))[["sc"]]),
+                          row.names = c("Family", "Site", "Residual")),                          
+               caption=paste("Linear mixed effects model, random effects", lobeTag),
+               digits=c(0,2),
+               display=c("s","fg"))
+  
+  print(t2,
+        include.rownames=TRUE,
+        file=logFile,
+        append=TRUE)
+  
+  # print the variance and standard deviation of the random effects
+  vc <- VarCorr(mod)
+  
+  t3 <- xtable(data.frame(vc),
+               display=c("s","s","s","s","g","fg"),
+               digits=c(0,0,0,0,2,2),
+               caption=paste("Variance of random effects", lobeTag))
+  
+  print(t3,
+        file=logFile,
+        append=TRUE,
+        include.rownames=FALSE)
+  
+  return(list(t1, t2, t3,
+              p1, p2, p3))
 }
