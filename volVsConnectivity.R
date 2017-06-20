@@ -83,7 +83,7 @@ ptSum <- rbind(ptSum, tmpdF)
 
 
 # import the spike percentage data
-sp <- read.xlsx("../all_sm_thld10_SP.xlsx", sheetIndex = 1)
+sp = read.table("../all_sm_thld10_SP.csv", header = TRUE, sep=",")
 
 sp.sub <- data.frame(wbic=sp$id, spMean=sp$mean)
 dF.sp <- merge(dF, sp.sub, by="wbic")

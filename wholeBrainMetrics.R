@@ -6,7 +6,7 @@ library(plyr)
 library(ggplot2)
 library(xtable)
 library(car)
-library(xlsx)
+# library(xlsx)
 library(lmerTest)
 library(segmented)
 library(MASS)
@@ -233,7 +233,7 @@ addSigBarGenes <- function(p, pVal, d1, d2, xList, ymax, ng,
   return(list(p=p, ymax=ymax))
 }
 
-addSigStar <- function(p, t7, dF, pVal, GS){
+addSigStar <- function(p, dF, pVal, GS){
   if(pVal < 0.0001){
     pVal.plot = "****"
   } else if(pVal < 0.001) {
@@ -2771,14 +2771,23 @@ clinicalScores <- function(metric,
 #   contrasts(dF.wb$GS) = contr.helmert(dF.wb$GS,1)
 #   
   if(family){
-    mod <- lmer(score ~ values*relevel(GS, ref="gene carriers") + Age + (1 | gene) + (1 | site) + (1 | Family),
+    mod <- lmer(score ~ values*relevel(GS, ref="FTD") + Age + (1 | gene) + (1 | site) + (1 | Family),
                 data=dF.wb,
                 REML=FALSE)
+    
+    mod.gc <- lmer(score ~ values*relevel(GS, ref="gene carriers") + Age + (1 | gene) + (1 | site) + (1 | Family),
+                   data=dF.wb,
+                   REML=FALSE)
   } else {
-    mod <- lmer(score ~ values*relevel(GS, ref="gene carriers") + Age + (1 | gene) + (1 | site),
+    mod <- lmer(score ~ values*relevel(GS, ref="FTD") + Age + (1 | gene) + (1 | site),
                 data=dF.wb,
                 REML=FALSE)
                 #contrasts = list(GS=contr.helmert))
+    
+    mod.gc <- lmer(score ~ values*relevel(GS, ref="gene carriers") + Age + (1 | gene) + (1 | site),
+                data=dF.wb,
+                REML=FALSE)
+    #contrasts = list(GS=contr.helmert))
   }
   
   # print random effects of the model
@@ -2850,6 +2859,15 @@ clinicalScores <- function(metric,
         file=logFile,
         append=TRUE)
   
+  t8 <- xtable(summary(mod.gc)[[10]],
+                digits=c(0,2,2,1,2,2),
+                display=c("s","fg","f","f","f","g"),
+                caption=paste("Satterthwaite estimates of pvalues of linear mixed effects model for", csName, metricName,lobeTag))
+  
+  print(t8,
+        file=logFile,
+        append=TRUE)
+  
   # now repeat with model excluding the interaction between genetic status to see if there is a correlation between graph and clinical measures
   if(family){
     mod2 <- lmer(score ~ values + GS + Age + (1 | gene) + (1 | site) + (1 | Family),
@@ -2864,60 +2882,60 @@ clinicalScores <- function(metric,
   # print random effects of the model
   mod2.coef <- ranef(mod2)
   
-  t8 <- xtable(mod2.coef$site,
+  t9 <- xtable(mod2.coef$site,
                digits=c(0,2),
                display=c("s", "fg"),
                caption = paste("Linear mixed effects model excluding gene interaction term, site coefficients",lobeTag, metricName, csName))
   
-  t9 <- xtable(mod2.coef$gene,
+  t10 <- xtable(mod2.coef$gene,
                digits=c(0,2),
                display=c("s", "fg"),
                caption = paste("Linear mixed effects model excluding gene interaction term, gene coefficients",lobeTag, metricName, csName))
   
   if(family){
-    t10 <- xtable(mod2.coef$Family,
+    t11 <- xtable(mod2.coef$Family,
                  digits=c(0,2),
                  display=c("s", "fg"),
                  caption = paste("Linear mixed effects model excluding gene interaction term, family coefficients",lobeTag, metricName, csName))
   } else {
-    t10 = NA
+    t11 = NA
   }
   
-  print(t8, file=logFile, append=TRUE)
-  print(t9, file=logFile, append=TRUE)
-  if(family){print(t8, file=logFile, append=TRUE)}
+  print(t10, file=logFile, append=TRUE)
+  print(t11, file=logFile, append=TRUE)
+  if(family){print(t10, file=logFile, append=TRUE)}
   
   # print variances
   vc <- VarCorr(mod2)
   
-  t11 <- xtable(data.frame(vc),
+  t12 <- xtable(data.frame(vc),
                display=c("s","s","s","s","g","fg"),
                digits=c(0,0,0,0,2,2),
                caption=paste("Variance of random effects without gene/value interaction", csName))
   
-  print(t11,
+  print(t12,
         file=logFile,
         append=TRUE,
         include.rownames=FALSE)
   
-  t12 <- xtable(summary(mod2)[[10]],
+  t13 <- xtable(summary(mod2)[[10]],
                digits=c(0,2,2,1,2,2),
                display=c("s","fg","f","f","f","g"),
                caption=paste("Satterthwaite estimates of pvalues of linear mixed effects model without gene/value interaction for", csName, metricName,lobeTag))
   
-  print(t12,
+  print(t13,
         file=logFile,
         append=TRUE)
   
   # now perform model comparison to see whether including the interaction term adds to the model
   modComparison <- anova(mod, mod2)
   
-  t13 <- xtable(modComparison,
+  t14 <- xtable(modComparison,
                caption = paste("Model comparison including (mod) and excluding (mod2) gene interaction term",csName, metricName,lobeTag),
                digits = c(0,0,2,2,2,2,2,2,2),
                display = c("s","d","fg","fg","fg","fg","d","fg","fg"))
   
-  print(t13,
+  print(t14,
         include.rownames=TRUE,
         file=logFile,
         append=TRUE)
@@ -2928,8 +2946,8 @@ clinicalScores <- function(metric,
   
   ## add significance stars
   # for gene carriers:
-  p4 <- addSigStar(p4,t7,dF.wb,t7[["Pr(>|t|)"]][[2]],"gene carriers")
-  p4 <- addSigStar(p4,t7,dF.wb,t7[["Pr(>|t|)"]][[5]],"FTD")
+  p4 <- addSigStar(p4,dF.wb,t8[["Pr(>|t|)"]][[2]],"gene carriers")
+  p4 <- addSigStar(p4,dF.wb,t7[["Pr(>|t|)"]][[2]],"FTD")
 
   p4 <- p4 + theme_bw()
   p4 <- p4 + labs(x=csName, y=metricName)
@@ -2965,6 +2983,7 @@ clinicalScores <- function(metric,
               t11= t11,
               t12= t12,
               t13= t13,
+              t14= t14,
               p1 = p1,
               p2 = p2,
               p3 = p3,
