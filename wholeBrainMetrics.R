@@ -233,6 +233,30 @@ addSigBarGenes <- function(p, pVal, d1, d2, xList, ymax, ng,
   return(list(p=p, ymax=ymax))
 }
 
+addSigStar <- function(p, t7, dF, pVal, GS){
+  if(pVal < 0.0001){
+    pVal.plot = "****"
+  } else if(pVal < 0.001) {
+    pVal.plot = "***"
+  } else if(pVal < 0.01) {
+    pVal.plot = "**"
+  } else if(pVal < 0.05){
+    pVal.plot = "*"
+  } else {
+    return(p)
+  }
+  
+  # get x coordinate
+  xmid = mean(dF[dF$GS==GS, "values"])
+
+  # get y coordinates
+  ymid = mean(dF[dF$GS==GS, "score"])
+  ygap = sqrt(mean(max(dF[,"score"])-min(dF[,"score"])))^2
+  ypos = ymid + 0.05*ygap
+  
+  p <- p + annotate("text", x=xmid, y=ypos, label=pVal.plot, colour="black", size=8)
+}
+
 #### main functions ####
 wholeBrainAnalysis <- function(metric,
                                metricName,
@@ -1919,7 +1943,7 @@ breakPointDiscontinuous <- function(metric,
                                     outDir="wholeBrainVsAOOResults",
                                     weighted=FALSE,
                                     exclNeg=FALSE,
-                                    h=30,w=45,s=4,tsz=12,ps=4,
+                                    h=30,w=45,s=4,tsz=12,ps=4, ts=12,
                                     normalise=TRUE,
                                     lobe=NA,
                                     hubT=NA){
@@ -2151,7 +2175,7 @@ breakPointDiscontinuous <- function(metric,
                        linetype="blank",
                        data=dF[dF$aoo>0.,],
                        fill=colList["FTD"], alpha=0.5)
-  
+
   # add significance indicator
   pVal = summary(piecewise)[[4]][4,4]
   if(pVal< 0.05){
@@ -2165,14 +2189,17 @@ breakPointDiscontinuous <- function(metric,
     } else {
       sigInd = "*"
     }
+    ymin = ggplot_build(p)$panel$ranges[[1]]$y.range[1]
+    ymax = ggplot_build(p)$panel$ranges[[1]]$y.range[2]
+    ygap = ymax - ymin
     
-    # get the maximum y values
-    yvalMax = max(dF$values.norm)
+    # set the y position
+    ypos = ymin+ygap*0.9
     
-    p <- p + annotate("text", x=0, y=yvalMax, label=sigInd, colour="black", size=8)
+    p <- p + annotate("text", x=0, y=ypos, label=sigInd, colour="black", size=16)
 
   }
-  
+
 #   p <- p + geom_segment(x=min(dF$aoo),
 #                         xend=0,
 #                         y=yMin.lower,
@@ -2245,11 +2272,11 @@ breakPointDiscontinuous <- function(metric,
 #                               breaks = breakList)
 #   
   # from line below: title=paste(metricName, "discontinuous breakpoint analysis", sep="\n"), 
-  p <- p + labs(title=lobeTag, y=paste(metricName, "(z-score)"), x="Years from estimated age of onset") + theme(axis.title.x=element_blank(), legend.key=element_rect(fill="white", colour="white"))
+  p <- p + labs(title=" ", y=paste(metricName, "(z-score)"), x="Years from estimated age of onset") + theme(axis.title.x=element_blank(), legend.key=element_rect(fill="white", colour="white"))
   p <- p + theme_bw() + theme(legend.key = element_rect(colour="#FFFFFF", fill = "#FFFFFF"))
   # p <- p + scale_fill_manual(name="Group",values=as.vector(colList))
   p <- p + scale_colour_manual(name="Group", values=as.vector(colList))
-  p <- p + theme(text=element_text(size=tsz), plot.title=element_text(size=tsz))
+  p <- p + theme(text=element_text(size=ts), plot.title=element_text(size=tsz))
   
   if(!is.na(lobe)){
     w=h
@@ -2282,10 +2309,16 @@ demographics <- function(demog, typeList, sp=NA, exclNeg=FALSE){
   type=typeList[demog]
 
   # merge with demographic data
-  dF.demog <- read.table("../genfi_Subjects_sjones_1_22_2015_17_47_47_restructure_summary.csv", sep="\t", header = TRUE)
-  names(dF.demog)[4] <- "wbic"
-  dF.demog <- dF.demog[dF.demog$duplicate!=1,] # remove duplicates that may have sneaked in
+  if(type=="none"){  # fudge to read the Diagnosis (Dx) column in this file
+    dF.demog <- read.table("../GENFI_DF1_MASTER.csv", sep="\t", header = TRUE)
+    names(dF.demog)[2] <- "wbic"
+  } else {
+    dF.demog <- read.table("../genfi_Subjects_sjones_1_22_2015_17_47_47_restructure_summary.csv", sep="\t", header = TRUE)
+    names(dF.demog)[4] <- "wbic"
+    dF.demog <- dF.demog[dF.demog$duplicate!=1,] # remove duplicates that may have sneaked in
+  }
   
+   
   dF.demog <- dF.demog[which(dF.demog$wbic %in% dF$wbic),]
   
   dF <- merge(dF, dF.demog[,-which(names(dF.demog)=="GS")],
@@ -2293,7 +2326,7 @@ demographics <- function(demog, typeList, sp=NA, exclNeg=FALSE){
               all.x=TRUE,
               all.y=FALSE)
   names(dF)[which(names(dF)==demog)] <- "demog"
-  
+
   # create summary table of demographic data
   if(type=="continuous"){
     dF.wb = ddply(dF, .(GS), summarise,
@@ -2307,6 +2340,15 @@ demographics <- function(demog, typeList, sp=NA, exclNeg=FALSE){
                   count0 = countIt(demog,0),
                   count1 = countIt(demog,1),
                   count2 = countIt(demog,2)
+    )
+    row.names(dF.wb) <- dF.wb[,"GS"]
+    dF.wb <- dF.wb[,-1]
+  } else if(type=="none"){
+    dF.wb = ddply(dF, .(GS), summarise,
+                  bvFTD = countIt(demog,"bvFTD"),
+                  PPA = countIt(demog,"PPA"),
+                  FTDALS = countIt(demog,"FTD-ALS"),
+                  NOS = countIt(demog,"Dementia-NOS")
     )
     row.names(dF.wb) <- dF.wb[,"GS"]
     dF.wb <- dF.wb[,-1]
@@ -2469,6 +2511,66 @@ demographics <- function(demog, typeList, sp=NA, exclNeg=FALSE){
                   )
              )
     }
+    
+  } else if(type=="none") {
+      if(!exclNeg){ # if negatives are excluded
+        geneNeg=paste(dF.wb[["gene negative", "bvFTD"]],
+                      dF.wb[["gene negative", "PPA"]],
+                      dF.wb[["gene negative", "FTDALS"]],
+                      dF.wb[["gene negative", "NOS"]],
+                      sep="/")
+      } else { # if negatives are included
+        geneNeg=NA
+        negVsFTD = list(p.value=NA,
+                        statistic=NA)
+        negVsCarrier = list(p.value=NA,
+                            statistic=NA)
+      }
+      geneCarriers=paste(dF.wb[["gene carriers", "bvFTD"]],
+                         dF.wb[["gene carriers", "PPA"]],
+                         dF.wb[["gene carriers", "FTDALS"]],
+                         dF.wb[["gene carriers", "NOS"]],
+                         sep="/")
+      
+      FTD=paste(dF.wb[["FTD", "bvFTD"]],
+                dF.wb[["FTD", "PPA"]],
+                dF.wb[["FTD", "FTDALS"]],
+                dF.wb[["FTD", "NOS"]],
+                sep="/")
+    if(exclNeg){
+      return(list(Demographic=demog,
+                  DOF=NA,
+                  pVal=NA,
+                  Fval=NA,
+                  ChiSq=NA,
+                  geneCarriers=geneCarriers,
+                  FTD=FTD,
+                  # negVsFTD.stat=NA,
+                  # negVsFTD.p=NA,
+                  # negVsCarrier.stat=NA,
+                  # negVsCarrier.p=NA,
+                  FTDVsCarrier.stat=NA,
+                  FTDVsCarrier.p=NA
+      )
+      )
+    } else {
+      return(list(Demographic=demog,
+                  DOF=NA,
+                  pVal=NA,
+                  Fval=NA,
+                  ChiSq=NA,
+                  geneNeg=geneNeg,
+                  geneCarriers=geneCarriers,
+                  FTD=FTD,
+                  negVsFTD.stat=NA,
+                  negVsFTD.p=NA,
+                  negVsCarrier.stat=NA,
+                  negVsCarrier.p=NA,
+                  FTDVsCarrier.stat=NA,
+                  FTDVsCarrier.p=NA
+      )
+      )
+    }
   }
 }
 
@@ -2603,7 +2705,6 @@ clinicalScores <- function(metric,
                           "FTD"      = paste(sapply(mean(values[GS=="FTD"], na.rm = TRUE),fn, a=2,b=3),
                                              paste("(", sapply(sd(values[GS=="FTD"], na.rm = TRUE),fn, a=2,b=3),   ")", sep=""))
     )
-    
   } else {
     dF.wb.summary = ddply(dF.wb, .(), summarise,
                           "gene carriers" = paste(sapply(mean(values[GS=="gene carriers"], na.rm = TRUE), fn, a=2,b=3),
@@ -2670,11 +2771,11 @@ clinicalScores <- function(metric,
 #   contrasts(dF.wb$GS) = contr.helmert(dF.wb$GS,1)
 #   
   if(family){
-    mod <- lmer(score ~ values*GS + Age + (1 | gene) + (1 | site) + (1 | Family),
+    mod <- lmer(score ~ values*relevel(GS, ref="gene carriers") + Age + (1 | gene) + (1 | site) + (1 | Family),
                 data=dF.wb,
                 REML=FALSE)
   } else {
-    mod <- lmer(score ~ values*GS + Age + (1 | gene) + (1 | site),
+    mod <- lmer(score ~ values*relevel(GS, ref="gene carriers") + Age + (1 | gene) + (1 | site),
                 data=dF.wb,
                 REML=FALSE)
                 #contrasts = list(GS=contr.helmert))
@@ -2825,12 +2926,17 @@ clinicalScores <- function(metric,
   p4 <- ggplot(data=dF.wb, aes_string(x="values", y="score", colour="GS"))
   p4 <- p4 + geom_smooth(method="lm")
   
+  ## add significance stars
+  # for gene carriers:
+  p4 <- addSigStar(p4,t7,dF.wb,t7[["Pr(>|t|)"]][[2]],"gene carriers")
+  p4 <- addSigStar(p4,t7,dF.wb,t7[["Pr(>|t|)"]][[5]],"FTD")
+
   p4 <- p4 + theme_bw()
   p4 <- p4 + labs(x=csName, y=metricName)
   p4 <- p4 + theme(text=element_text(size=tsz))
   p4 <- p4 + scale_fill_manual(name="Group",values=as.vector(colList))
-  p4 <- p4 + theme(legend.position="none")
-  p4 <- p4 + labs(title=paste(csName,lobeTag))
+  p4 <- p4 + theme(legend.position="right")
+  # p4 <- p4 + labs(title=paste(csName,lobeTag))
   
   if(exclNeg){
     outw = 2.5
@@ -3148,6 +3254,7 @@ graphTimeComparisonPresymptomatic <- function(metric,
     dF <- data.frame(dF, lobe=lobe)
   }
   
+  ##### include only gene carriers in this line #####
   dF <- dF[dF$GS=="gene carriers",]
   dF <- dF[dF$aoo<=0,]
   outFile = paste(outFile, "Presymptomatic", sep="")
