@@ -11,7 +11,7 @@ library(lmerTest)
 library(segmented)
 library(MASS)
 
-genfiDir = "/home/tim/GENFI/GENFI_camgrid_20150525/"
+genfiDir = "/media/tim/e87b22f3-4f3a-4dba-8c87-908464748c0d/backup/GENFI/GENFI_camgrid_20150525/"
 
 #### helper functions ####
 dotTests <- function(gslist, dF){
@@ -58,7 +58,7 @@ importGraphData <- function(metric, weighted, edgePC=3, Age=TRUE, lobe=NA, hubT=
   # if there is a hub threshold, apply it now
   # if a hub threshold is defined, then firstly read the file that contains the hub definitions
   if(!is.na(hubT)){
-    lines=readLines("/home/tim/GENFI/GENFI_camgrid_20150525/Control/degree_allSubjects.txt") # read the file as lines
+    lines=readLines(paste(genfiDir,"Control/degree_allSubjects.txt",sep="/")) # read the file as lines
     lineList = lapply(lines, function(x) strsplit(x, " ")) # extract the lines in to a list
     hubs = unlist(lineList[[which(sapply(lineList, function(x) return(x[[1]][[1]]))==as.character(hubT))]])[-1]  # extract the line starting with the required hub threshold (-1 removes the threshold from the final list)
     hubs = sapply(hubs, function(x) paste("X",x,sep = ""))
@@ -1146,7 +1146,7 @@ graphTimeComparison <- function(metric,
   dF <- stackIt(dF, metric)
   
   # get age of onset data
-  genfiData <- read.table("/home/tim/GENFI/genfi_Subjects_sjones_1_22_2015_17_47_47_restructure_summary.csv",
+  genfiData <- read.table("../genfi_Subjects_sjones_1_22_2015_17_47_47_restructure_summary.csv",
                           sep="\t",
                           header = TRUE)
   
@@ -1566,7 +1566,7 @@ graphTimeComparisonNL <- function(metric,
   dF <- stackIt(dF, metric)
   
   # get age of onset data
-  genfiData <- read.table("/home/tim/GENFI/genfi_Subjects_sjones_1_22_2015_17_47_47_restructure_summary.csv",
+  genfiData <- read.table("../genfi_Subjects_sjones_1_22_2015_17_47_47_restructure_summary.csv",
                           sep="\t",
                           header = TRUE)
   
@@ -1872,7 +1872,7 @@ breakpoint <- function(metric,
   dF <- stackIt(dF, metric) # changes the name of the metric to 'values'
   
   # get age of onset data
-  genfiData <- read.table("/home/tim/GENFI/genfi_Subjects_sjones_1_22_2015_17_47_47_restructure_summary.csv",
+  genfiData <- read.table("../genfi_Subjects_sjones_1_22_2015_17_47_47_restructure_summary.csv",
                           sep="\t",
                           header = TRUE)
   
@@ -1990,7 +1990,7 @@ breakPointDiscontinuous <- function(metric,
   dF <- stackIt(dF, metric) # changes the name of the metric to 'values'
   
   # get age of onset data
-  genfiData <- read.table("/home/tim/GENFI/genfi_Subjects_sjones_1_22_2015_17_47_47_restructure_summary.csv",
+  genfiData <- read.table("../genfi_Subjects_sjones_1_22_2015_17_47_47_restructure_summary.csv",
                           sep="\t",
                           header = TRUE)
   
@@ -2727,7 +2727,7 @@ clinicalScores <- function(metric,
   }
   
   # import clinical score data (includes TIV)
-  csdF = read.table("/home/tim/GENFI/clinicalScores.csv", sep=",", header = TRUE)
+  csdF = read.table("../clinicalScores.csv", sep=",", header = TRUE)
   names(csdF)[which(names(csdF)=="BLINDID")] <- "wbic"
   csdF <- csdF[,c("wbic", cs)]
   names(csdF)[which(names(csdF)==cs)] = "score"
@@ -2950,10 +2950,10 @@ clinicalScores <- function(metric,
   p4 <- addSigStar(p4,dF.wb,t7[["Pr(>|t|)"]][[2]],"FTD")
 
   p4 <- p4 + theme_bw()
-  p4 <- p4 + labs(x=csName, y=metricName)
+  p4 <- p4 + labs(x=metricName, y=csName)
   p4 <- p4 + theme(text=element_text(size=tsz))
   p4 <- p4 + scale_fill_manual(name="Group",values=as.vector(colList))
-  p4 <- p4 + theme(legend.position="right")
+  p4 <- p4 + theme(legend.position="bottom", legend.title = element_blank())
   # p4 <- p4 + labs(title=paste(csName,lobeTag))
   
   if(exclNeg){
@@ -3113,7 +3113,7 @@ graphTimeComparisonCarriersOnly <- function(metric,
   dF <- stackIt(dF, metric)
   
   # get age of onset data
-  genfiData <- read.table("/home/tim/GENFI/genfi_Subjects_sjones_1_22_2015_17_47_47_restructure_summary.csv",
+  genfiData <- read.table("../genfi_Subjects_sjones_1_22_2015_17_47_47_restructure_summary.csv",
                           sep="\t",
                           header = TRUE)
   
@@ -3257,7 +3257,7 @@ graphTimeComparisonPresymptomatic <- function(metric,
   dF <- stackIt(dF, metric)
   
   # get age of onset data
-  genfiData <- read.table("/home/tim/GENFI/genfi_Subjects_sjones_1_22_2015_17_47_47_restructure_summary.csv",
+  genfiData <- read.table("../genfi_Subjects_sjones_1_22_2015_17_47_47_restructure_summary.csv",
                           sep="\t",
                           header = TRUE)
   
