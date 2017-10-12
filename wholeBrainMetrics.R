@@ -181,8 +181,8 @@ cubicFun <- function(x, ac,bc,cc,dd){
 
 addSigBar <- function(p, pVal, d1, d2, xList, sig.value=0.05, excludeNegs=FALSE){
   if(pVal < sig.value){
-    ymax = ggplot_build(p)$panel$ranges[[1]]$y.range[2]
-    ymin = ggplot_build(p)$panel$ranges[[1]]$y.range[1]
+    ymax = ggplot_build(p)$layout$panel_ranges[[1]]$y.range[2]
+    ymin = ggplot_build(p)$layout$panel_ranges[[1]]$y.range[1]
     ygap = ymax - ymin
     
     if(pVal < 0.0001){
@@ -209,7 +209,7 @@ addSigBar <- function(p, pVal, d1, d2, xList, sig.value=0.05, excludeNegs=FALSE)
 addSigBarGenes <- function(p, pVal, d1, d2, xList, ymax, ng,
                            nLen=3, sig.value=0.05, excludeNegs=FALSE){
   if(pVal < sig.value){
-    ymin = ggplot_build(p)$panel$ranges[[1]]$y.range[1]
+    ymin = ggplot_build(p)$layout$panel_ranges[[1]]$y.range[1]
     ygap = ymax - ymin
     
     if(pVal < 0.0001){
@@ -494,10 +494,13 @@ wholeBrainAnalysis <- function(metric,
   # add significance bar
   xList = seq_along(levels(dF$GS))
   names(xList) = levels(dF$GS)
+  print(xList)
   for(n in seq(length(pwGS[1,]))){
     pVal = as.numeric(as.character(pwTtests[n, "p"]))
     d1 = pwGS[1,n]
     d2 = pwGS[2,n]
+    print(paste(pVal, d1, d2))
+    
     p <- addSigBar(p, pVal, d1, d2, xList)
   }
   
@@ -532,8 +535,8 @@ wholeBrainAnalysis <- function(metric,
   
   xList = seq_along(levels(dF$GS))
   names(xList) = levels(dF$GS)
-  ymax = ggplot_build(pg)$panel$ranges[[1]]$y.range[2]
-  ymin = ggplot_build(pg)$panel$ranges[[1]]$y.range[1]
+  ymax = ggplot_build(pg)$layout$panel_ranges[[1]]$y.range[2]
+  ymin = ggplot_build(pg)$layout$panel_ranges[[1]]$y.range[1]
   
   ytop.max = ymax
   for(ng in seq_along(levels(dF.wb$gene))){
@@ -2189,8 +2192,8 @@ breakPointDiscontinuous <- function(metric,
     } else {
       sigInd = "*"
     }
-    ymin = ggplot_build(p)$panel$ranges[[1]]$y.range[1]
-    ymax = ggplot_build(p)$panel$ranges[[1]]$y.range[2]
+    ymin = ggplot_build(p)$layout$panel_ranges[[1]]$y.range[1]
+    ymax = ggplot_build(p)$layout$panel_ranges[[1]]$y.range[2]
     ygap = ymax - ymin
     
     # set the y position
