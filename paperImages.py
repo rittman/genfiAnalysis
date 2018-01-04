@@ -202,7 +202,7 @@ for l in lobeList:
 
 allLen = len(imggList)*2
 hout = int((allLen/ncol + allLen%ncol) * ho)
-outImg = Image.new("RGB", (outw,hout), "white") 
+outImg = Image.new("RGB", (outw,hout+50), "white") # +50 to stop the bottom figures' axis labels being chopped off
 
 count = 0
 for n,imgg in enumerate(imggList):
@@ -324,13 +324,34 @@ img2 = path.join(wbvsaoo,"degree_wtGenePos.png")
 outImgTop = importResize([img1, img2], c1w, ppm)
 
 # Figure 6 - volume vs connectivity
-img1 = "volVsConnectivity/volumesVsConnectivity_Whole Brain Volume.png"
-img2 = "volVsConnectivity/volumesVsConnectivity_Frontal lobe volume.png" 
-img3 = "volVsConnectivity/volumesVsConnectivity_Temporal lobe Volume.png" 
+imgList = ["volVsConnectivity/volumesVsConnectivity_Whole Brain Volume.png",
+        "volVsConnectivity/volumesVsConnectivity_Frontal lobe volume.png",
+        "volVsConnectivity/volumesVsConnectivity_Temporal lobe Volume.png"]
 
 outImg = None
 
-for i in [img1, img2, img3]:
+for n,i in enumerate(imgList):
     im = Image.open(i)
     if not outImg:
         w,h = im.size
+        outw = int(c1w*ppm)
+        y = ((float(h)*outw) / ((float(w)*h)*float(len(imgList))) ) # multiplier for the images - assumes images are the same size
+        
+    # resize images
+    imw = int(y*w)
+    imh = int(y*h)
+
+    im = im.resize((imw,imh))
+    
+    if not outImg:
+        outImg = Image.new("RGB",(outw,imh),"white")
+
+    # paste on images
+    left = n*imw
+    upper = 0
+    right = left+imw
+    lower = upper+imh
+    
+    outImg.paste(im, (left, upper, right, lower))
+
+outImg.save("volVsConn.png")

@@ -494,13 +494,10 @@ wholeBrainAnalysis <- function(metric,
   # add significance bar
   xList = seq_along(levels(dF$GS))
   names(xList) = levels(dF$GS)
-  print(xList)
   for(n in seq(length(pwGS[1,]))){
     pVal = as.numeric(as.character(pwTtests[n, "p"]))
     d1 = pwGS[1,n]
     d2 = pwGS[2,n]
-    print(paste(pVal, d1, d2))
-    
     p <- addSigBar(p, pVal, d1, d2, xList)
   }
   
@@ -579,11 +576,13 @@ wholeBrainAnalysisMixedEffects <- function(metric,
                                            cols,
                                            sp, weighted=TRUE,
                                            outDir="wholeBrainResults",
-                                           edgePC=3, tsz=12,
+                                           edgePC=3,
                                            exclNeg=FALSE,
                                            family=FALSE,
+                                           h=15,w=15,s=4,tsz=12,ps=4,  # tsz = text size
                                            lobe=NA, # define the lobe of the brain to examine
-                                           hubT=NA){
+                                           hubT=NA,
+                                           pVal=NA){
   
   # create output directory
   dir.create(outDir, showWarnings = FALSE)
@@ -732,17 +731,66 @@ wholeBrainAnalysisMixedEffects <- function(metric,
 #                digits=c(0,1,1,2),
 #                display=c("s","f","d","fg"),
 #                caption=paste("ANOVA of linear mixed effects model for", metricName))
-    t5 <- xtable(summary(mod)[[10]],
+  t5 <- xtable(summary(mod)[[10]],
                  digits=c(0,2,2,1,2,2),
                  display=c("s","fg","f","f","f","g"),
                  caption=paste("Satterthwaite estimates of pvalues of linear mixed effects model for", metricName,lobeTag))
   
-  
   print(t5,
         file=logFile,
         append=TRUE)
+  
+  # now do a plot for group differences, collapsed across genes
+  # reorder factors if gene negatives removed
+  if(exclNeg){
+    dF.wb <- dF.wb[dF.wb$GS!="gene negative",]
+    dF.wb$GS <- factor(dF.wb$GS, levels=c("gene carriers", "FTD"))
+    colList = unlist(cols[levels(dF.wb$GS)])
+  }
 
-  return(list(t1, t2, t3, t4, t5, p1, p2, p3))
+  p4 <- ggplot(dF.wb, aes_string(x="GS", y="values", fill="GS"))
+  p4 <- p4 + geom_boxplot()
+  
+  # add significance bar
+  xList = seq_along(levels(dF.wb$GS))
+  names(xList) = levels(dF.wb$GS)
+  pwGS <- combn(levels(dF.wb$GS),2)
+  for(n in seq(length(pwGS[1,]))){
+    # pVal = as.numeric(as.character(pwTtests[n, "p4"]))
+
+    pVal = tryCatch({summary(mod)[[10]][3,"Pr(>|t|)"]},
+        error=function(err){print("No p value to find")
+          return(pVal)})
+    d1 = pwGS[1,n]
+    d2 = pwGS[2,n]
+    p4 <- addSigBar(p4, pVal, d1, d2, xList)
+  }
+  
+  print(colList)
+  p4 <- p4 + theme_bw()
+  p4 <- p4 + labs(y=metricName) + theme(axis.title.x=element_blank())
+  p4 <- p4 + theme(text=element_text(size=tsz))
+  p4 <- p4 + scale_fill_manual(name="Group",values=as.vector(colList))
+  p4 <- p4 + theme(legend.position="none")
+  if(!is.na(lobe)){
+    p4 <- p4 + labs(title=lobe)
+  }
+  
+  if(exclNeg){
+    outw = 2.5
+  } else {
+    outw = 3
+  }
+  
+  plotFile = paste(paste(paste(outFile, lobeTag, sep=""),"allgroups",sep="_"), "png", sep=".")
+  ggsave(plotFile,
+         scale=s,
+         dpi=600,
+         height=h, width=w,
+         units="mm")
+  
+
+  return(list(t1, t2, t3, t4, t5, p1, p2, p3, p4))
 }
 
 wholeBrainAnalysisMixedEffectsHubComparison <- function(metric,
@@ -893,6 +941,7 @@ wholeBrainAnalysisMixedEffectsHubComparison <- function(metric,
   #                digits=c(0,1,1,2),
   #                display=c("s","f","d","fg"),
   #                caption=paste("ANOVA of linear mixed effects model for", metricName))
+
   t5 <- xtable(summary(mod)[[10]],
                digits=c(0,2,2,1,2,2),
                display=c("s","fg","f","f","f","g"),

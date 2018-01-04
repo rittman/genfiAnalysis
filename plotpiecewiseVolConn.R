@@ -1,4 +1,5 @@
 # Script to plot volume and network values on the same axes to try and demonstrate structural/functional dissociation
+source('wholeBrainMetrics.R')
 
 getlinesVals <- function(piecewise, dF, resample=TRUE){
   y <- piecewise$coefficients[[1]]
@@ -226,6 +227,29 @@ piecewise.score <- lm(score.norm ~ aoo*(aoo<bkpt) + aoo*(aoo>=bkpt), data=dF.wb)
 # initiate plot
 p <- ggplot(dF.wb, aes_string(x="aoo", y="degree"))
 
+lineVals <- getlinesVals(piecewise.score, dF.wb, resample = TRUE)
+
+yMin.score = lineVals[["yMin"]]
+yMax.score = lineVals[["yMax"]]
+yVal.score = lineVals[["yVal"]]
+yVal.score.lower = lineVals[["yVal.lower"]]
+yVal.score.upper = lineVals[["yVal.upper"]]
+yEndVal.score = lineVals[["yEndVal"]]
+
+p <- p + geom_segment(x=min(dF.wb$aoo),
+                      xend=0.,
+                      y=yMin.score,
+                      yend=yEndVal.score,
+                      size=1.5,
+                      colour="red")
+
+p <- p + geom_segment(x=0.,
+                      xend=max(dF.wb$aoo),
+                      y=yVal.score,
+                      yend=yMax.score,
+                      size=1.5,
+                      colour="red")
+
 lineVals.degree <- getlinesVals(piecewise.degree, dF.wb, resample = TRUE)
 
 yMin.degree = lineVals.degree[["yMin"]]
@@ -285,29 +309,10 @@ p <- p + geom_segment(x=0.,
                       size=1.5,
                       colour="black")
 
-lineVals <- getlinesVals(piecewise.score, dF.wb, resample = TRUE)
-
-yMin.score = lineVals[["yMin"]]
-yMax.score = lineVals[["yMax"]]
-yVal.score = lineVals[["yVal"]]
-yVal.score.lower = lineVals[["yVal.lower"]]
-yVal.score.upper = lineVals[["yVal.upper"]]
-yEndVal.score = lineVals[["yEndVal"]]
-
-p <- p + geom_segment(x=min(dF.wb$aoo),
-                      xend=0.,
-                      y=yMin.score,
-                      yend=yEndVal.score,
-                      size=1.5,
-                      colour="red")
-
-p <- p + geom_segment(x=0.,
-                      xend=max(dF.wb$aoo),
-                      y=yVal.score,
-                      yend=yMax.score,
-                      size=1.5,
-                      colour="red")
-
 p <- p + geom_blank()
 
 p <- p + scale_y_continuous(limits=c(0,1))
+
+p <- p + theme_bw()+ theme(axis.text.y=element_blank(),
+               axis.title.y = element_blank(),
+               axis.ticks.y = element_blank()) 
