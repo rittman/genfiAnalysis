@@ -94,7 +94,7 @@ ctVals <- sapply(cutOffs, getCorr, x=dF.sp)
 dF.ctVals <- data.frame(matrix(unlist(ctVals), byrow = TRUE, ncol = length(ctVals[,1])))
 names(dF.ctVals) <- c("r", "p")
 
-# plot the results
+# plot the results of the cut-offs
 dF.plot <- data.frame(cutOffs=cutOffs, dF.ctVals)
 
 p <- ggplot(dF.plot, aes_string(x="cutOffs", y="p"))
@@ -241,7 +241,9 @@ metricName = metrics[[names(metrics)[6]]]
 for(cs in names(scoreListVols)){
   csName = scoreListVols[[cs]]
   
-  wbame = clinicalScores(metric, metricName, cs, paste(csName, "\n(mls)"), cols=cols, sp=sp, weighted=TRUE, tsz=10, exclNeg=TRUE)
+  wbame = clinicalScores(metric, metricName, cs, paste(csName, "\n(mls)"),
+                         cols=cols, sp=sp, weighted=TRUE, tsz=10, exclNeg=TRUE,
+                         plotPoints=TRUE)
   
   t1 = wbame[[1]]
   t2 = wbame[[2]]

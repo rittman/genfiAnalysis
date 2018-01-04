@@ -2682,7 +2682,8 @@ clinicalScores <- function(metric,
                            family=FALSE,
                            lobe=NA, # define the lobe of the brain to examine
                            hubT=NA, # hub threshold
-                           csFile="clinicalScores.csv"
+                           csFile="clinicalScores.csv",
+                           plotPoints=FALSE
                            ){
   
   # create output directory
@@ -2995,6 +2996,11 @@ clinicalScores <- function(metric,
   # plot
   p4 <- ggplot(data=dF.wb, aes_string(x="values", y="score", colour="GS"))
   p4 <- p4 + geom_smooth(method="lm")
+  
+  # add points if desired
+  if(plotPoints){
+    p4 <- p4 + geom_point()
+  }
   
   ## add significance stars
   # for gene carriers:
