@@ -242,7 +242,7 @@ for(cs in names(scoreListVols)){
   csName = scoreListVols[[cs]]
   
   wbame = clinicalScores(metric, metricName, cs, paste(csName, "\n(mls)"),
-                         cols=cols, sp=sp, weighted=TRUE, tsz=10, exclNeg=TRUE,
+                         cols=cols, sp=sp, weighted=TRUE, tsz=10, exclNeg=FALSE,
                          plotPoints=TRUE)
   
   t1 = wbame[[1]]
@@ -282,3 +282,53 @@ for(cs in names(scoreListVols)){
   
   ggsave(paste("volVsConnectivity/volumesVsConnectivity_",csName,".png",sep=""), plot=p4, width=80, height=80, units="mm")
 }
+
+# global efficiency
+metric = names(metrics)[1]
+metricName = metrics[[names(metrics)[1]]]
+
+for(cs in names(scoreListVols)){
+  csName = scoreListVols[[cs]]
+  
+  wbame = clinicalScores(metric, metricName, cs, paste(csName, "\n(mls)"),
+                         cols=cols, sp=sp, weighted=FALSE, tsz=10, exclNeg=FALSE,
+                         plotPoints=TRUE)
+  
+  t1 = wbame[[1]]
+  t2 = wbame[[2]]
+  t3 = wbame[[3]]
+  t4 = wbame[[4]]
+  t5 = wbame[[5]]
+  t6 = wbame[[6]]
+  t7 = wbame[[7]]
+  t8 = wbame[[8]]
+  t9 = wbame[[9]]
+  t10= wbame[[10]]
+  t11= wbame[[11]]
+  t12= wbame[[12]]
+  t13= wbame[[13]]
+  t14= wbame[[14]]
+  p1 = wbame[[15]]
+  p2 = wbame[[16]]
+  p3 = wbame[[17]]
+  p4 = wbame[[18]]
+  
+  # plots of random effects variance
+  # grid.arrange(p1, p2, nrow=1)
+  
+  # plot(p4)
+  
+  # print(t1, include.rownames=FALSE)
+  # print(t2, include.rownames=FALSE)
+  # print(t3, include.rownames=FALSE)
+  # print(t6, include.rownames=FALSE) # table of random effects
+  # print(t7, include.rownames=TRUE) # table of fixed effects
+  # print(t11, include.rownames=FALSE) # table of random effects - excluding gene interaction term
+  # print(t12, include.rownames=TRUE) # table of fixed effects - excluding gene interaction term
+  # 
+  # model comparison
+  # print(t13, include.rownames=TRUE) # table of fixed effects
+  
+  ggsave(paste("volVsConnectivity/volumesVsGlobalEfficiency_",csName,".png",sep=""), plot=p4, width=80, height=80, units="mm")
+}
+

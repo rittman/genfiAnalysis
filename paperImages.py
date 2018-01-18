@@ -7,8 +7,11 @@ from os import path
 from PIL import Image
 
 # path definitions
+out_directory = "figures"
 wbvsaoo = "wholeBrainVsAOOResults"
+wbr_reports = "Reports/wholeBrainResults"
 wbr = "wholeBrainResults"
+wbr_lobes = "Reports/lobar_reports/wholeBrainResults"
 
 # set image widths
 #PNAS widths
@@ -25,6 +28,7 @@ def importResize(inList, outwd, ppmm):
     This script takes two images and places them side by side with a fixed width
     (outw) measured in mm, with a pixels per millimeter values of ppm. The
     heights of the images are optimised so that both images fit the width.
+
     """
     wList = [] # list of image widths
     hList = [] # list of image heights
@@ -46,7 +50,7 @@ def importResize(inList, outwd, ppmm):
     # get ratio - nb only works with two images
     # multiplier for the first image
     y_r = ((hList[1]*outwd) / ((wList[0]*hList[1]) + (hList[0]*wList[1])))
-    x_r = ((y*hList[0]) / hList[1]) # multiplier for the second image
+    x_r = ((y_r*hList[0]) / hList[1]) # multiplier for the second image
 
     w0 = int(y_r*wList[0]) # new width for first image
     h0 = int(y_r*hList[0]) # new height for first image
@@ -78,16 +82,16 @@ def importResize(inList, outwd, ppmm):
     return outIm # return the output image
 
 # Image 1 - top panel
-img1 = path.join(wbr, "degree_wt_allgroups.png")
+img1 = path.join(wbr_reports, "degree_wt_allgroups.png")
 #img2 = path.join(wbvsaoo, "degree_wtGenePos.png")
-img2 = path.join(wbr, "degree_wt_byGene.png")
+img2 = path.join(wbr_reports, "degree_wt_byGene.png")
 
 outImgTop = importResize([img1, img2], c1w, ppm)
 
 # Image 1 - bottom panel
-img1 = path.join(wbr, "geNorm_allgroups.png")
+img1 = path.join(wbr_reports, "geNorm_allgroups.png")
 #img2 = path.join(wbvsaoo, "geNormGenePos.png")
-img2 = path.join(wbr, "geNorm_byGene.png")
+img2 = path.join(wbr_reports, "geNorm_byGene.png")
 
 outImgBottom = importResize([img1, img2], c1w, ppm)
 
@@ -114,9 +118,9 @@ outImg.paste(outImgBottom, (left, upper, right, lower))
 
 # save the output as Figure1.png
 outImg.info["dpi"] = dpi
-outImg.save("Figure1.png")
+outImg.save(path.join(out_directory, "Figure1.png"))
 
-### Figure 2 - breakpoint analysis
+### Figure 4 - breakpoint analysis
 img1 = path.join(wbvsaoo, "degree_wtGenePos_DiscontBkpt_.png")
 img2 = path.join(wbvsaoo, "geNormGenePos_DiscontBkpt_.png")
 
@@ -153,9 +157,9 @@ lower += h2
 outImg.paste(im2, (left, upper, right, lower))
 
 outImg.info["dpi"] = dpi
-outImg.save("Figure2.png")
+outImg.save(path.join(out_directory, "Figure4.png"))
 
-## Figure 3
+## Figure 2
 # define list of lobes
 lobeList = ["Frontal",
             "Temporal",
@@ -175,7 +179,7 @@ outw = int(c2wa*ppm)
 
 for l in lobeList:
     # open group comparison image
-    imag = path.join(wbr, "degree_wt"+l+"_allgroups.png")
+    imag = path.join(wbr_lobes, "degree_wt_"+l+"_allgroups.png")
     imgg = Image.open(imag)
 
     # open discontinous breakpoint analysis
@@ -209,8 +213,8 @@ count = 0
 for n, imgg in enumerate(imggList):
     # group difference
     w, h = imgg.size
-    left = int(float(w)*(count%ncol))
-    upper = int(float(h)*(count/ncol))
+    left = int(float(w)*int(count%ncol))
+    upper = int(float(h)*int(count/ncol))
     right = left+w
     lower = upper+h
 
@@ -221,8 +225,8 @@ for n, imgg in enumerate(imggList):
     # discontinuous breakpoint analysis
     imgdb = imgdbList[n]
     w, h = imgdb.size
-    left = int(float(w)*(count%ncol))
-    upper = int(float(h)*(count/ncol))
+    left = int(float(w)*int(count%ncol))
+    upper = int(float(h)*int(count/ncol))
     right = left+w
     lower = upper+h
 
@@ -236,9 +240,9 @@ for n, imgg in enumerate(imggList):
 
 
 outImg.info["dpi"] = dpi
-outImg.save("Figure3.png")
+outImg.save(path.join(out_directory, "Figure2.png"))
 
-## Figure 4
+## Figure 3
 # define list of lobes
 lobeList = ["Frontal",
             "Temporal",
@@ -258,7 +262,7 @@ outw = int(c2wa*ppm)
 
 for l in lobeList:
     # open group comparison image
-    imag = path.join(wbr, "closeCentNorm"+l+"_allgroups.png")
+    imag = path.join(wbr_lobes, "closeCentNorm_"+l+"_allgroups.png")
     imgg = Image.open(imag)
 
     # open discontinous breakpoint analysis
@@ -289,8 +293,8 @@ outImg = Image.new("RGB", (outw, hout), "white")
 count = 0
 for n, imgg in enumerate(imggList):
     w, h = imgg.size
-    left = int(float(w)*(count%ncol))
-    upper = int(float(h)*(count/ncol))
+    left = int(float(w)*int(count%ncol))
+    upper = int(float(h)*int(count/ncol))
     right = left+w
     lower = upper+h
 
@@ -300,8 +304,8 @@ for n, imgg in enumerate(imggList):
 
     imgdb = imgdbList[n]
     w, h = imgdb.size
-    left = int(float(w)*(count%ncol))
-    upper = int(float(h)*(count/ncol))
+    left = int(float(w)*int(count%ncol))
+    upper = int(float(h)*int(count/ncol))
     right = left+w
     lower = upper+h
 
@@ -315,7 +319,7 @@ for n, imgg in enumerate(imggList):
 
 
 outImg.info["dpi"] = dpi
-outImg.save("Figure4.png")
+outImg.save(path.join(out_directory, "Figure3.png"))
 
 
 # Figure 5 - hubs
@@ -327,9 +331,17 @@ outImgTop = importResize([img1, img2], c1w, ppm)
 # Figure 6 - volume vs connectivity
 imgList = ["volVsConnectivity/volumesVsConnectivity_Whole Brain Volume.png",
            "volVsConnectivity/volumesVsConnectivity_Frontal lobe volume.png",
-           "volVsConnectivity/volumesVsConnectivity_Temporal lobe Volume.png"]
+           "volVsConnectivity/volumesVsConnectivity_Temporal lobe Volume.png",
+           "volVsConnectivity/volumesVsConnectivity_Parietal lobe Volume.png"] #,
+#           "volVsConnectivity/volumesVsGlobalEfficiency_Whole Brain Volume.png",
+#           "volVsConnectivity/volumesVsGlobalEfficiency_Frontal lobe volume.png",
+#           "volVsConnectivity/volumesVsGlobalEfficiency_Temporal lobe Volume.png",
+#           "volVsConnectivity/volumesVsGlobalEfficiency_Parietal lobe Volume.png"]
 
 outImg = None
+
+nrow=2
+ncol = len(imgList) / nrow
 
 for n, i in enumerate(imgList):
     im = Image.open(i)
@@ -338,7 +350,7 @@ for n, i in enumerate(imgList):
         outw = int(c1w*ppm)
     
         # multiplier for the images - assumes images are the same size
-        y = ((float(h)*outw) / ((float(w)*h)*float(len(imgList))))
+        y = ((float(h)*outw) / ((float(w)*h)*ncol))
 
     # resize images
     imw = int(y*w)
@@ -347,14 +359,14 @@ for n, i in enumerate(imgList):
     im = im.resize((imw, imh))
 
     if not outImg:
-        outImg = Image.new("RGB", (outw, imh), "white")
+        outImg = Image.new("RGB", (outw, imh*nrow), "white")
 
     # paste on images
-    left = n*imw
-    upper = 0
+    left = int(n%ncol * imw)
+    upper = int(n/ncol) * imh
     right = left+imw
     lower = upper+imh
 
     outImg.paste(im, (left, upper, right, lower))
 
-outImg.save("volVsConn.png")
+outImg.save(path.join(out_directory, "Figure5.png"))
