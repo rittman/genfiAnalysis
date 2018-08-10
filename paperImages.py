@@ -172,44 +172,44 @@ outImg.paste(outImgBottom, (left, upper, right, lower))
 outImg.info["dpi"] = dpi
 outImg.save(path.join(out_directory, "Figure1.png"))
 
-### Figure 4 - breakpoint analysis
-img1 = path.join(wbvsaoo_lobar, "degree_wtGenePos_DiscontBkpt.png")
-img2 = path.join(wbvsaoo_lobar, "geNormGenePos_DiscontBkpt.png")
-
-im1 = Image.open(img1)
-w1, h1 = im1.size
-
-im2 = Image.open(img2)
-w2, h2 = im2.size
-
-# ratio of old to new lengths
-rw = (c1w*ppm)/float(w1)
-
-w1 = int(rw*w1)
-h1 = int(rw*h1)
-w2 = int(rw*w2)
-h2 = int(rw*h2)
-
-im1 = im1.resize((w1, h1))
-im2 = im2.resize((w2, h2))
-
-outw = int(c1w*ppm)
-outImg = Image.new("RGB", (outw, h1+h2), "white")
-
-left = 0
-upper = 0
-right = w1
-lower = h1
-outImg.paste(im1, (left, upper, right, lower))
-
-left = 0
-upper = lower
-right = w2
-lower += h2
-outImg.paste(im2, (left, upper, right, lower))
-
-outImg.info["dpi"] = dpi
-outImg.save(path.join(out_directory, "Figure4.png"))
+#### Figure 4 - breakpoint analysis
+#img1 = path.join(wbvsaoo_lobar, "degree_wtGenePos_DiscontBkpt.png")
+#img2 = path.join(wbvsaoo_lobar, "geNormGenePos_DiscontBkpt.png")
+#
+#im1 = Image.open(img1)
+#w1, h1 = im1.size
+#
+#im2 = Image.open(img2)
+#w2, h2 = im2.size
+#
+## ratio of old to new lengths
+#rw = (c1w*ppm)/float(w1)
+#
+#w1 = int(rw*w1)
+#h1 = int(rw*h1)
+#w2 = int(rw*w2)
+#h2 = int(rw*h2)
+#
+#im1 = im1.resize((w1, h1))
+#im2 = im2.resize((w2, h2))
+#
+#outw = int(c1w*ppm)
+#outImg = Image.new("RGB", (outw, h1+h2), "white")
+#
+#left = 0
+#upper = 0
+#right = w1
+#lower = h1
+#outImg.paste(im1, (left, upper, right, lower))
+#
+#left = 0
+#upper = lower
+#right = w2
+#lower += h2
+#outImg.paste(im2, (left, upper, right, lower))
+#
+#outImg.info["dpi"] = dpi
+#outImg.save(path.join(out_directory, "Figure4.png"))
 
 ## Figure 2
 # define list of lobes
@@ -421,4 +421,4 @@ for n, i in enumerate(imgList):
 
     outImg.paste(im, (left, upper, right, lower))
 
-outImg.save(path.join(out_directory, "Figure5.png"))
+outImg.save(path.join(out_directory, "Figure4.png"))

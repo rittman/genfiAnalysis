@@ -1,0 +1,88 @@
+---
+title: "Untitled"
+author: "Timothy Rittman"
+date: "10 August 2018"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+# Script to tabulate clinical scores as per reviewer request
+# Timothy Rittman 10/8/2018
+
+library(plyr)
+library(xtable)
+library(ggplot2)
+```
+
+## Clinical scores
+The purpose of this report is to assess the relationship between clinical scores and years to symptom onset.
+
+```{r import}
+
+# import clinical scores
+csdF = read.table("/home/tim/GENFI/clinicalScores.csv", sep=",", header = TRUE)
+names(csdF)[which(names(csdF)=="BLINDID")] <- "wbic"
+
+# factorise the gene status
+csdF$GS <- factor(csdF$GS, labels = c("Negative", "Carrier", "FTD"))
+```
+
+```{r analysis, results='asis'}
+scoreListCog = list(
+  N1="MMSE",
+  N2="LogMemoryImmediate",
+  N3="LogMemoryDelayed",
+  N4="DigitSpanForward",
+  N5="DigitSpanBackward",
+  N6="TrailsA",
+  N7="TrailsB",
+  N8="DigitSymbol",
+  N9="BostonNaming",
+  N10="VerbalFluencyCategory",
+  N11="VerbalFluencyLetter",
+  N12="BlockDesign"
+)
+
+# set contrasts
+c1 <- c(2,-1,-1)
+c2 <- c(0, 1, -1)
+mat <- cbind(c1, c2)
+
+contrasts(csdF$GS) <- mat
+
+for(cs in names(scoreListCog)){
+  # plot the data
+  p <- ggplot(csdF, aes_string(x="Yrs.from.AV_AAO", y=cs, colour="GS"))
+  p <- p + geom_point() + geom_smooth(method="lm")
+  p <- p + labs(x="Years from diagnosis", y=scoreListCog[[cs]])
+  print(p)
+  
+  # apply linear model
+  csdF.model <- csdF[,c(cs, "GS", "Yrs.from.AV_AAO")]
+  names(csdF.model)[[1]] <- "cs"
+  
+  model <- lm(cs ~ GS * Yrs.from.AV_AAO, data=csdF.model)
+  model.summary <- summary(model)
+  
+  print(xtable(model.summary))
+  
+  # now look at pairwise group differences
+  Negative.vs.Carriers.ttest <- t.test(csdF.model[csdF.model$GS=="Negative","cs"],
+                                       csdF.model[csdF.model$GS=="Carrier","cs"])
+  
+  Carriers.vs.FTD.ttest <- t.test(csdF.model[csdF.model$GS=="Carrier","cs"],
+                                       csdF.model[csdF.model$GS=="FTD","cs"])
+  
+  outtab <- data.frame(t.statistic=c(Negative.vs.Carriers.ttest$statistic,
+                                     Carriers.vs.FTD.ttest$statistic),
+                       p.value=c(Negative.vs.Carriers.ttest$p.value,
+                                 Carriers.vs.FTD.ttest$p.value))
+  
+  row.names(outtab) <- c("Negative.vs.Carriers.ttest",
+                         "Carriers.vs.FTD.ttest")
+  print(xtable(outtab, digits = c(0,2,5)))
+}
+
+
+```
