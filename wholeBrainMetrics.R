@@ -11,7 +11,8 @@ library(lmerTest)
 library(segmented)
 library(MASS)
 
-genfiDir = "/media/tim/e87b22f3-4f3a-4dba-8c87-908464748c0d/backup/GENFI/GENFI_camgrid_20150525/"
+# genfiDir = "/media/tim/e87b22f3-4f3a-4dba-8c87-908464748c0d/backup/GENFI/GENFI_camgrid_20150525/"
+genfiDir = "/home/tim/GENFI/GENFI_camgrid_20150525/"
 
 #### helper functions ####
 dotTests <- function(gslist, dF){
@@ -181,8 +182,8 @@ cubicFun <- function(x, ac,bc,cc,dd){
 
 addSigBar <- function(p, pVal, d1, d2, xList, sig.value=0.05, excludeNegs=FALSE){
   if(pVal < sig.value){
-    ymax = ggplot_build(p)$layout$panel_ranges[[1]]$y.range[2]
-    ymin = ggplot_build(p)$layout$panel_ranges[[1]]$y.range[1]
+    ymax = ggplot_build(p)$layout$panel_scales_y[[1]]$range$range[[2]]
+    ymin = ggplot_build(p)$layout$panel_scales_y[[1]]$range$range[[1]]
     ygap = ymax - ymin
     
     if(pVal < 0.0001){
@@ -210,7 +211,7 @@ addSigBar <- function(p, pVal, d1, d2, xList, sig.value=0.05, excludeNegs=FALSE)
 addSigBarGenes <- function(p, pVal, d1, d2, xList, ymax, ng,
                            nLen=3, sig.value=0.05, excludeNegs=FALSE){
   if(pVal < sig.value){
-    ymin = ggplot_build(p)$layout$panel_ranges[[1]]$y.range[1]
+    ymin = ggplot_build(p)$layout$panel_scales_y[[1]]$range$range[[1]]
     ygap = ymax - ymin
     
     if(pVal < 0.0001){
@@ -430,6 +431,16 @@ wholeBrainAnalysis <- function(metric,
                                              paste("(", sapply(sd(values[GS=="FTD"], na.rm = TRUE), fn),   ")", sep=""))
     )
     
+    # add totals row
+    dF.wb.summary.additional <-ddply(dF.wb, .(), summarise,
+                         "gene carriers" = paste(sapply(mean(values[GS=="gene carriers"], na.rm = TRUE), fn),
+                                                 paste("(", sapply(sd(values[GS=="gene carriers"], na.rm = TRUE),fn),   ")", sep="")),
+                         "FTD"      = paste(sapply(mean(values[GS=="FTD"], na.rm = TRUE),fn),
+                                            paste("(", sapply(sd(values[GS=="FTD"], na.rm = TRUE), fn),   ")", sep=""))
+                           )
+   names(dF.wb.summary.additional)[1] <- c("gene")
+   dF.wb.summary <- rbind(dF.wb.summary, dF.wb.summary.additional)
+    
   } else {
     dF.wb.summary = ddply(dF.wb, .(gene), summarise,
                           "gene negative" = paste(sapply(mean(values[GS=="gene negative"], na.rm = TRUE), fn),
@@ -439,7 +450,18 @@ wholeBrainAnalysis <- function(metric,
                           "FTD"      = paste(sapply(mean(values[GS=="FTD"], na.rm = TRUE),fn),
                                              paste("(", sapply(sd(values[GS=="FTD"], na.rm = TRUE), fn),   ")", sep=""))
     )
+    # add totals row
+    dF.wb.summary.additional <- ddply(dF.wb, .(), summarise,
+                                 "gene negative" = paste(sapply(mean(values[GS=="gene negative"], na.rm = TRUE), fn),
+                                                         paste("(", sapply(sd(values[GS=="gene negative"], na.rm = TRUE),fn),   ")", sep="")),
+                                 "gene carriers" = paste(sapply(mean(values[GS=="gene carriers"], na.rm = TRUE), fn),
+                                                         paste("(", sapply(sd(values[GS=="gene carriers"], na.rm = TRUE),fn),   ")", sep="")),
+                                 "FTD"      = paste(sapply(mean(values[GS=="FTD"], na.rm = TRUE),fn),
+                                                    paste("(", sapply(sd(values[GS=="FTD"], na.rm = TRUE), fn),   ")", sep=""))
+                           )
     
+    names(dF.wb.summary.additional)[1] <- c("gene")
+    dF.wb.summary <- rbind(dF.wb.summary, dF.wb.summary.additional)
   }
   
   
@@ -533,8 +555,8 @@ wholeBrainAnalysis <- function(metric,
   
   xList = seq_along(levels(dF$GS))
   names(xList) = levels(dF$GS)
-  ymax = ggplot_build(pg)$layout$panel_ranges[[1]]$y.range[2]
-  ymin = ggplot_build(pg)$layout$panel_ranges[[1]]$y.range[1]
+  ymax = ggplot_build(p)$layout$panel_scales_y[[1]]$range$range[[2]]
+  ymin = ggplot_build(p)$layout$panel_scales_y[[1]]$range$range[[1]]
   
   ytop.max = ymax
   for(ng in seq_along(levels(dF.wb$gene))){
@@ -585,7 +607,7 @@ wholeBrainAnalysisMixedEffects <- function(metric,
                                            lobe=NA, # define the lobe of the brain to examine
                                            hubT=NA,
                                            pVal=NA,
-                                           add_sig_bar=TRUE){
+                                           add_sig_bar=FALSE){
   
   # create output directory
   dir.create(outDir, showWarnings = FALSE)
@@ -777,8 +799,7 @@ wholeBrainAnalysisMixedEffects <- function(metric,
     xList = seq_along(levels(dF.wb$GS))
     names(xList) = levels(dF.wb$GS)
     pwGS <- combn(levels(dF.wb$GS),2)
-    
-    print(pwGS)
+
     if(exclNeg){
       pval_sequence = seq(2,length(pwGS[1,]))
     } else {
@@ -786,7 +807,6 @@ wholeBrainAnalysisMixedEffects <- function(metric,
     }
     
     for(n in pval_sequence){ # 
-      print(n)
       # pVal = as.numeric(as.character(pwTtests[n, "p4"]))
       pVal = 1
       pVal = tryCatch({summary(mod)[[10]][n,"Pr(>|t|)"]},
@@ -799,6 +819,9 @@ wholeBrainAnalysisMixedEffects <- function(metric,
       }
       
       d2 = levels(dF$GS)[n]
+      
+      print(paste(d1, d2, xList))
+
       p4 <- addSigBar(p4, pVal, d1, d2, xList)
     }
   }
@@ -2280,8 +2303,8 @@ breakPointDiscontinuous <- function(metric,
     } else {
       sigInd = "*"
     }
-    ymin = ggplot_build(p)$layout$panel_ranges[[1]]$y.range[1]
-    ymax = ggplot_build(p)$layout$panel_ranges[[1]]$y.range[2]
+    ymin = ggplot_build(p)$layout$panel_scales_y[[1]]$range$range[[1]]
+    ymax = ggplot_build(p)$layout$panel_scales_y[[1]]$range$range[[2]]
     ygap = ymax - ymin
     
     # set the y position

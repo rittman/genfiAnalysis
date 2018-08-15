@@ -18,6 +18,10 @@ library(ggplot2)
 ## Clinical scores
 The purpose of this report is to assess the relationship between clinical scores and years to symptom onset.
 
+The first contrast (GSc1) is between the negative and gene carrier groups.
+
+The second contrast (GSc2) is between the gene carrier and FTD group.
+
 ```{r import}
 
 # import clinical scores
@@ -26,6 +30,9 @@ names(csdF)[which(names(csdF)=="BLINDID")] <- "wbic"
 
 # factorise the gene status
 csdF$GS <- factor(csdF$GS, labels = c("Negative", "Carrier", "FTD"))
+
+# add column differentiating gene positive from gene negative only
+csdF <- cbind(csdF, data.frame(GS.pos.neg = sapply(csdF$GS, function(x) if(x=="Negative"){return("Negative")} else {return("Positive")})))
 ```
 
 ```{r analysis, results='asis'}
@@ -45,7 +52,7 @@ scoreListCog = list(
 )
 
 # set contrasts
-c1 <- c(2,-1,-1)
+c1 <- c(1,-1, 0)
 c2 <- c(0, 1, -1)
 mat <- cbind(c1, c2)
 
@@ -54,7 +61,7 @@ contrasts(csdF$GS) <- mat
 for(cs in names(scoreListCog)){
   # plot the data
   p <- ggplot(csdF, aes_string(x="Yrs.from.AV_AAO", y=cs, colour="GS"))
-  p <- p + geom_point() + geom_smooth(method="lm")
+  p <- p + geom_point() + geom_smooth(method="lm", aes_string()) #colour="GS.pos.neg"))
   p <- p + labs(x="Years from diagnosis", y=scoreListCog[[cs]])
   print(p)
   
