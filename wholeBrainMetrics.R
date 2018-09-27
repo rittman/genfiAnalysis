@@ -11,7 +11,7 @@ library(lmerTest)
 library(segmented)
 library(MASS)
 
-genfiDir = "/home/tim/GENFI/GENFI_camgrid_20150525/"
+genfiDir = "/media/tim/e87b22f3-4f3a-4dba-8c87-908464748c0d/backup/GENFI/GENFI_camgrid_20150525/"
 
 #### helper functions ####
 dotTests <- function(gslist, dF){
