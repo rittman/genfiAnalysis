@@ -11,7 +11,8 @@ library(lmerTest)
 library(segmented)
 library(MASS)
 
-genfiDir = "/media/tim/e87b22f3-4f3a-4dba-8c87-908464748c0d/backup/GENFI/GENFI_camgrid_20150525/"
+# genfiDir = "/media/tim/e87b22f3-4f3a-4dba-8c87-908464748c0d/backup/GENFI/GENFI_camgrid_20150525/"
+genfiDir = "/home/tim/GENFI/GENFI_camgrid_20150525/"
 
 #### helper functions ####
 dotTests <- function(gslist, dF){
@@ -58,7 +59,7 @@ importGraphData <- function(metric, weighted, edgePC=3, Age=TRUE, lobe=NA, hubT=
   # if there is a hub threshold, apply it now
   # if a hub threshold is defined, then firstly read the file that contains the hub definitions
   if(!is.na(hubT)){
-    lines=readLines("/home/tim/GENFI/GENFI_camgrid_20150525/Control/degree_allSubjects.txt") # read the file as lines
+    lines=readLines(paste(genfiDir,"Control/degree_allSubjects.txt",sep="/")) # read the file as lines
     lineList = lapply(lines, function(x) strsplit(x, " ")) # extract the lines in to a list
     hubs = unlist(lineList[[which(sapply(lineList, function(x) return(x[[1]][[1]]))==as.character(hubT))]])[-1]  # extract the line starting with the required hub threshold (-1 removes the threshold from the final list)
     hubs = sapply(hubs, function(x) paste("X",x,sep = ""))
@@ -74,7 +75,7 @@ importGraphData <- function(metric, weighted, edgePC=3, Age=TRUE, lobe=NA, hubT=
   
   if(Age){
     # add age
-    dF.demog <- read.table("../genfi_Subjects_sjones_1_22_2015_17_47_47_restructure_summary.csv", sep="\t", header = TRUE)
+    dF.demog <- read.table("/home/tim/GENFI/genfi_Subjects_sjones_1_22_2015_17_47_47_restructure_summary.csv", sep="\t", header = TRUE)
     names(dF.demog)[4] <- "wbic"
     
     #   dF.demog <- dF.demog[dF.demog$wbic[dF$wbic %in% dF.demog$wbic],]
@@ -99,7 +100,7 @@ applySP <- function(dF, sp, spVal=10){
   dF <- dF[dF$spMean < spVal,]
   
   # filter by length of scan
-  dF.demog <- read.table("../genfi_Subjects_sjones_1_22_2015_17_47_47_restructure_summary.csv", sep="\t", header = TRUE)
+  dF.demog <- read.table("/home/tim/GENFI/genfi_Subjects_sjones_1_22_2015_17_47_47_restructure_summary.csv", sep="\t", header = TRUE)
   names(dF.demog)[4] <- "wbic"
   dF.demog <- dF.demog[dF.demog$scan_duration>100,] # exclude lines with subjects with only short scans
   
@@ -165,13 +166,13 @@ SSquadFun <- selfStart(~aq + bq*x + cq*x^2,
                        }, c("aq", "bq", "cq"))
 
 SScubicFun <- selfStart(~ac + bc*x + cc*x^2 + dc*x^3,
-                       function(mCall, data, LHS){
-                         xy <- sortedXyData(mCall[["x"]], LHS, data)
-                         pars <- as.vector(coef(nls(y ~ ac + bc*x + cc*x^2 + dc*x^3, data=xy)))
-                         setNames(c(pars[3], pars[1], pars[2]),
-                                  mCall[c("ac", "bc", "cc", "dc")])
-                         
-                       }, c("ac", "bc", "cc", "dc"))
+                        function(mCall, data, LHS){
+                          xy <- sortedXyData(mCall[["x"]], LHS, data)
+                          pars <- as.vector(coef(nls(y ~ ac + bc*x + cc*x^2 + dc*x^3, data=xy)))
+                          setNames(c(pars[3], pars[1], pars[2]),
+                                   mCall[c("ac", "bc", "cc", "dc")])
+                          
+                        }, c("ac", "bc", "cc", "dc"))
 
 cubicFun <- function(x, ac,bc,cc,dd){
   # an attempt at building a quadratic function
@@ -181,8 +182,8 @@ cubicFun <- function(x, ac,bc,cc,dd){
 
 addSigBar <- function(p, pVal, d1, d2, xList, sig.value=0.05, excludeNegs=FALSE){
   if(pVal < sig.value){
-    ymax = ggplot_build(p)$panel$ranges[[1]]$y.range[2]
-    ymin = ggplot_build(p)$panel$ranges[[1]]$y.range[1]
+    ymax = ggplot_build(p)$layout$panel_scales_y[[1]]$range$range[[2]]
+    ymin = ggplot_build(p)$layout$panel_scales_y[[1]]$range$range[[1]]
     ygap = ymax - ymin
     
     if(pVal < 0.0001){
@@ -197,8 +198,9 @@ addSigBar <- function(p, pVal, d1, d2, xList, sig.value=0.05, excludeNegs=FALSE)
     ymax = ymax + .15*ygap
     
     ypos = ymax - ygap*.05
-    xpos1 = xList[d1]
-    xpos2 = xList[d2]
+    xpos1 = xList[[d1]]
+    xpos2 = xList[[d2]]
+
     p <- p + geom_segment(x=xpos1, xend=xpos2, y=ypos, yend=ypos, colour="black")
     p <- p + annotate("text", x=mean(c(xpos1, xpos2)), y=ypos, label=pVal.plot, colour="black", size=8)
     p <- p + scale_y_continuous(limits=c(ymin, ymax))
@@ -209,7 +211,7 @@ addSigBar <- function(p, pVal, d1, d2, xList, sig.value=0.05, excludeNegs=FALSE)
 addSigBarGenes <- function(p, pVal, d1, d2, xList, ymax, ng,
                            nLen=3, sig.value=0.05, excludeNegs=FALSE){
   if(pVal < sig.value){
-    ymin = ggplot_build(p)$panel$ranges[[1]]$y.range[1]
+    ymin = ggplot_build(p)$layout$panel_scales_y[[1]]$range$range[[1]]
     ygap = ymax - ymin
     
     if(pVal < 0.0001){
@@ -248,7 +250,7 @@ addSigStar <- function(p, dF, pVal, GS){
   
   # get x coordinate
   xmid = mean(dF[dF$GS==GS, "values"])
-
+  
   # get y coordinates
   ymid = mean(dF[dF$GS==GS, "score"])
   ygap = sqrt(mean(max(dF[,"score"])-min(dF[,"score"])))^2
@@ -268,7 +270,7 @@ wholeBrainAnalysis <- function(metric,
                                excludeNegs=FALSE, # TRUE to exclude gene negative subjects
                                lobe=NA, # define the lobe of the brain to examine
                                hubT=NA # hub threshold
-                               ){
+){
   
   # create output directory
   dir.create(outDir, showWarnings = FALSE)
@@ -344,7 +346,7 @@ wholeBrainAnalysis <- function(metric,
                           "gene carriers" = paste(sapply(mean(values[GS=="gene carriers"], na.rm = TRUE), fn, a=2,b=3),
                                                   paste("(", sapply(sd(values[GS=="gene carriers"], na.rm = TRUE),fn, a=2,b=3),   ")", sep="")),
                           "FTD"      = paste(sapply(mean(values[GS=="FTD"], na.rm = TRUE),fn, a=2,b=3),
-                                                  paste("(", sapply(sd(values[GS=="FTD"], na.rm = TRUE),fn, a=2,b=3),   ")", sep=""))
+                                             paste("(", sapply(sd(values[GS=="FTD"], na.rm = TRUE),fn, a=2,b=3),   ")", sep=""))
     )
     
   } else {
@@ -352,16 +354,16 @@ wholeBrainAnalysis <- function(metric,
                           "gene carriers" = paste(sapply(mean(values[GS=="gene carriers"], na.rm = TRUE), fn, a=2,b=3),
                                                   paste("(", sapply(sd(values[GS=="gene carriers"], na.rm = TRUE),fn, a=2,b=3),   ")", sep="")),
                           "FTD"      = paste(sapply(mean(values[GS=="FTD"], na.rm = TRUE),fn, a=2,b=3),
-                                                  paste("(", sapply(sd(values[GS=="FTD"], na.rm = TRUE),fn, a=2,b=3),   ")", sep=""))
+                                             paste("(", sapply(sd(values[GS=="FTD"], na.rm = TRUE),fn, a=2,b=3),   ")", sep=""))
     )
     
   }
   
-#   print(xtable(dF.wb.summary[,-1],
-#                caption=paste("Mean and standard deviations for",metricName,"values in individuals")),
-#         include.rownames=FALSE,
-#         file=logFile,
-#         append=TRUE)
+  #   print(xtable(dF.wb.summary[,-1],
+  #                caption=paste("Mean and standard deviations for",metricName,"values in individuals")),
+  #         include.rownames=FALSE,
+  #         file=logFile,
+  #         append=TRUE)
   
   if(excludeNegs){
     dF.wb <- dF.wb[dF.wb$GS!="gene negative",]
@@ -371,7 +373,7 @@ wholeBrainAnalysis <- function(metric,
   # ANOVA of the differences
   mod <- lm(values~GS*gene, data=dF.wb)
   mod.aov <- anova(mod)
-
+  
   t2 <- xtable(mod.aov,
                digits = c(0,0,2,2,1,2),
                display = c("s","d", "fg", "fg", "f", "fg"),
@@ -426,8 +428,18 @@ wholeBrainAnalysis <- function(metric,
                           "gene carriers" = paste(sapply(mean(values[GS=="gene carriers"], na.rm = TRUE), fn),
                                                   paste("(", sapply(sd(values[GS=="gene carriers"], na.rm = TRUE),fn),   ")", sep="")),
                           "FTD"      = paste(sapply(mean(values[GS=="FTD"], na.rm = TRUE),fn),
-                                                  paste("(", sapply(sd(values[GS=="FTD"], na.rm = TRUE), fn),   ")", sep=""))
+                                             paste("(", sapply(sd(values[GS=="FTD"], na.rm = TRUE), fn),   ")", sep=""))
     )
+    
+    # add totals row
+    dF.wb.summary.additional <-ddply(dF.wb, .(), summarise,
+                         "gene carriers" = paste(sapply(mean(values[GS=="gene carriers"], na.rm = TRUE), fn),
+                                                 paste("(", sapply(sd(values[GS=="gene carriers"], na.rm = TRUE),fn),   ")", sep="")),
+                         "FTD"      = paste(sapply(mean(values[GS=="FTD"], na.rm = TRUE),fn),
+                                            paste("(", sapply(sd(values[GS=="FTD"], na.rm = TRUE), fn),   ")", sep=""))
+                           )
+   names(dF.wb.summary.additional)[1] <- c("gene")
+   dF.wb.summary <- rbind(dF.wb.summary, dF.wb.summary.additional)
     
   } else {
     dF.wb.summary = ddply(dF.wb, .(gene), summarise,
@@ -436,12 +448,23 @@ wholeBrainAnalysis <- function(metric,
                           "gene carriers" = paste(sapply(mean(values[GS=="gene carriers"], na.rm = TRUE), fn),
                                                   paste("(", sapply(sd(values[GS=="gene carriers"], na.rm = TRUE),fn),   ")", sep="")),
                           "FTD"      = paste(sapply(mean(values[GS=="FTD"], na.rm = TRUE),fn),
-                                                  paste("(", sapply(sd(values[GS=="FTD"], na.rm = TRUE), fn),   ")", sep=""))
+                                             paste("(", sapply(sd(values[GS=="FTD"], na.rm = TRUE), fn),   ")", sep=""))
     )
+    # add totals row
+    dF.wb.summary.additional <- ddply(dF.wb, .(), summarise,
+                                 "gene negative" = paste(sapply(mean(values[GS=="gene negative"], na.rm = TRUE), fn),
+                                                         paste("(", sapply(sd(values[GS=="gene negative"], na.rm = TRUE),fn),   ")", sep="")),
+                                 "gene carriers" = paste(sapply(mean(values[GS=="gene carriers"], na.rm = TRUE), fn),
+                                                         paste("(", sapply(sd(values[GS=="gene carriers"], na.rm = TRUE),fn),   ")", sep="")),
+                                 "FTD"      = paste(sapply(mean(values[GS=="FTD"], na.rm = TRUE),fn),
+                                                    paste("(", sapply(sd(values[GS=="FTD"], na.rm = TRUE), fn),   ")", sep=""))
+                           )
     
+    names(dF.wb.summary.additional)[1] <- c("gene")
+    dF.wb.summary <- rbind(dF.wb.summary, dF.wb.summary.additional)
   }
   
-
+  
   t5 <- xtable(dF.wb.summary,
                caption=paste("Mean and standard deviations for",metricName," values in individuals"))
   
@@ -532,8 +555,8 @@ wholeBrainAnalysis <- function(metric,
   
   xList = seq_along(levels(dF$GS))
   names(xList) = levels(dF$GS)
-  ymax = ggplot_build(pg)$panel$ranges[[1]]$y.range[2]
-  ymin = ggplot_build(pg)$panel$ranges[[1]]$y.range[1]
+  ymax = ggplot_build(p)$layout$panel_scales_y[[1]]$range$range[[2]]
+  ymin = ggplot_build(p)$layout$panel_scales_y[[1]]$range$range[[1]]
   
   ytop.max = ymax
   for(ng in seq_along(levels(dF.wb$gene))){
@@ -555,6 +578,7 @@ wholeBrainAnalysis <- function(metric,
   pg <- pg + theme(text=element_text(size=tsz))
   
   plotFile = paste(paste(paste(outFile, lobeTag, sep=""),"byGene",sep="_"), "png", sep=".")
+  print(plotFile)
   ggsave(plotFile,
          scale=s,
          dpi=600,
@@ -576,11 +600,14 @@ wholeBrainAnalysisMixedEffects <- function(metric,
                                            cols,
                                            sp, weighted=TRUE,
                                            outDir="wholeBrainResults",
-                                           edgePC=3, tsz=12,
+                                           edgePC=3,
                                            exclNeg=FALSE,
                                            family=FALSE,
+                                           h=15,w=15,s=4,tsz=12,ps=4,  # tsz = text size
                                            lobe=NA, # define the lobe of the brain to examine
-                                           hubT=NA){
+                                           hubT=NA,
+                                           pVal=NA,
+                                           add_sig_bar=FALSE){
   
   # create output directory
   dir.create(outDir, showWarnings = FALSE)
@@ -620,7 +647,7 @@ wholeBrainAnalysisMixedEffects <- function(metric,
   if(!is.na(lobe)){
     dF.wb <- data.frame(dF.wb, lobe=lobe)
   }
-
+  
   # Set contrasts if control group are to be excluded
   # NB this retains the control group in the estimation of the age effect and as a null regressor
   if(exclNeg){
@@ -634,6 +661,22 @@ wholeBrainAnalysisMixedEffects <- function(metric,
     
     rownames(cMat) <- levels(dF.wb$GS)
     # attr(dF.wb$GS, "contrasts") = ginv(cMat)
+  } else {
+    geneNegative_vs_genePositive = c(1,-1,0)
+    geneNegative_vs_FTD = c(1,0,-1)
+    genePositive_vs_FTD = c(0,1,-1)
+    
+    
+    cMat <- rbind(geneNegative_vs_genePositive,
+                  geneNegative_vs_FTD,
+                  genePositive_vs_FTD
+                  )
+    
+    # nList = rownames(cMat)
+    cMat <- ginv(cMat)
+    # colnames(cMat) = nList
+
+    # rownames(cMat) <- levels(dF.wb$GS)
   }
   
   # ANOVA of the differences
@@ -648,12 +691,15 @@ wholeBrainAnalysisMixedEffects <- function(metric,
                   data=dF.wb,
                   REML=FALSE,
                   contrasts = list(GS=cMat))
+      # ,
+      #             contrasts = list(GS=cMat))
     }
   } else {
     if(family){
       mod <- lmer(values ~ GS + Age + (1 | gene) + (1 | site) + (1 | Family),
                   data=dF.wb,
-                  REML=FALSE)
+                  REML=FALSE,
+                  contrasts = list(GS=cMat))
     } else {
       mod <- lmer(values ~ GS + Age + (1 | gene) + (1 | site),
                   data=dF.wb,
@@ -661,15 +707,14 @@ wholeBrainAnalysisMixedEffects <- function(metric,
     }
   }
   
-  
   # print random effects of the model
   mod.coef <- ranef(mod)
   
   t1 <- xtable(mod.coef$site,
-                 digits=c(0,2),
-                 display=c("s", "fg"),
+               digits=c(0,2),
+               display=c("s", "fg"),
                caption = paste("Linear mixed effects model, site coefficients",lobeTag))
-
+  
   t2 <- xtable(mod.coef$gene,
                digits=c(0,2),
                display=c("s", "fg"),
@@ -711,47 +756,115 @@ wholeBrainAnalysisMixedEffects <- function(metric,
   
   # print variances
   vc <- VarCorr(mod)
-
+  
   t4 <- xtable(data.frame(vc),
                display=c("s","s","s","s","g","fg"),
                digits=c(0,0,0,0,2,2),
                caption="Variance of random effects")
-
+  
   print(t4,
         file=logFile,
         append=TRUE,
         include.rownames=FALSE)
   
-#   # Type II ANOVA
-#   mod.avo <- Anova(mod, type="II")
-#   
-#   t5 <- xtable(mod.avo,
-#                digits=c(0,1,1,2),
-#                display=c("s","f","d","fg"),
-#                caption=paste("ANOVA of linear mixed effects model for", metricName))
-    t5 <- xtable(summary(mod)[[10]],
-                 digits=c(0,2,2,1,2,2),
-                 display=c("s","fg","f","f","f","g"),
-                 caption=paste("Satterthwaite estimates of pvalues of linear mixed effects model for", metricName,lobeTag))
-  
+  #   # Type II ANOVA
+  #   mod.avo <- Anova(mod, type="II")
+  #   
+  #   t5 <- xtable(mod.avo,
+  #                digits=c(0,1,1,2),
+  #                display=c("s","f","d","fg"),
+  #                caption=paste("ANOVA of linear mixed effects model for", metricName))
+  t5 <- xtable(summary(mod)[[10]],
+               digits=c(0,2,2,1,2,2),
+               display=c("s","fg","f","f","f","g"),
+               caption=paste("Satterthwaite estimates of pvalues of linear mixed effects model for", metricName,lobeTag))
   
   print(t5,
         file=logFile,
         append=TRUE)
+  
+  # now do a plot for group differences, collapsed across genes
+  # reorder factors if gene negatives removed
+  if(exclNeg){
+    dF.wb <- dF.wb[dF.wb$GS!="gene negative",]
+    dF.wb$GS <- factor(dF.wb$GS, levels=c("gene carriers", "FTD"))
+    colList = unlist(cols[levels(dF.wb$GS)])
+  }
+  
+  p4 <- ggplot(dF.wb, aes_string(x="GS", y="values", fill="GS"))
+  p4 <- p4 + geom_boxplot()
+  
+  # add significance bar
+  if(add_sig_bar){
+    xList = seq_along(levels(dF.wb$GS))
+    names(xList) = levels(dF.wb$GS)
+    pwGS <- combn(levels(dF.wb$GS),2)
 
-  return(list(t1, t2, t3, t4, t5, p1, p2, p3))
+    if(exclNeg){
+      pval_sequence = seq(2,length(pwGS[1,]))
+    } else {
+      pval_sequence = c(2,3)
+    }
+    
+    for(n in pval_sequence){ # 
+      # pVal = as.numeric(as.character(pwTtests[n, "p4"]))
+      pVal = 1
+      pVal = tryCatch({summary(mod)[[10]][n,"Pr(>|t|)"]},
+                      error=function(err){print("No p value to find")
+                        return(pVal)})
+      if(exclNeg){
+        d1 = pwGS[n,1]
+      } else {
+        d1 = "gene negative"
+      }
+      
+      d2 = levels(dF$GS)[n]
+      
+      print(paste(d1, d2, xList))
+
+      p4 <- addSigBar(p4, pVal, d1, d2, xList)
+    }
+  }
+  
+  p4 <- p4 + theme_bw()
+  p4 <- p4 + labs(y=metricName) + theme(axis.title.x=element_blank())
+  p4 <- p4 + theme(text=element_text(size=tsz))
+  p4 <- p4 + scale_fill_manual(name="Group",values=as.vector(colList))
+  p4 <- p4 + theme(legend.position="none")
+  if(!is.na(lobe)){
+    p4 <- p4 + labs(title=lobe)
+  }
+  
+  if(!exclNeg){
+    w = 20
+  }
+  
+  plotFile = paste(outFile, lobeTag, sep="")
+  if(!exclNeg){
+    plotFile = paste(outFile, "allgroups",sep="_")
+  }
+  
+  plotFile = paste(plotFile, "png", sep=".")
+  ggsave(plotFile,
+         scale=s,
+         dpi=600,
+         height=h, width=w,
+         units="mm")
+  
+  
+  return(list(t1, t2, t3, t4, t5, p1, p2, p3, p4))
 }
 
 wholeBrainAnalysisMixedEffectsHubComparison <- function(metric,
-                                                         metricName,
-                                                         cols,
-                                                         sp, weighted=TRUE,
-                                                         outDir="wholeBrainResults",
-                                                         edgePC=3, tsz=12,
-                                                         exclNeg=FALSE,
-                                                         family=FALSE,
-                                                         hubT=1.5,
-                                                         h=15,w=15,s=4,ps=4  # tsz = text size
+                                                        metricName,
+                                                        cols,
+                                                        sp, weighted=TRUE,
+                                                        outDir="wholeBrainResults",
+                                                        edgePC=3, tsz=12,
+                                                        exclNeg=FALSE,
+                                                        family=FALSE,
+                                                        hubT=1.5,
+                                                        h=15,w=15,s=4,ps=4  # tsz = text size
 ){
   # create output directory
   dir.create(outDir, showWarnings = FALSE)
@@ -802,8 +915,8 @@ wholeBrainAnalysisMixedEffectsHubComparison <- function(metric,
   p4 <- p4 + theme_bw()
   p4 <- p4 + labs(y=metricName) + theme(axis.title.x=element_blank())
   p4 <- p4 + theme(text=element_text(size=tsz), legend.title=element_blank())
-#   p4 <- p4 + scale_fill_manual(name="Group",values=as.vector(colList))
-#   p4 <- p4 + theme(legend.position="none")
+  #   p4 <- p4 + scale_fill_manual(name="Group",values=as.vector(colList))
+  #   p4 <- p4 + theme(legend.position="none")
   
   plotFile = paste(paste(outFile,"HubComparison",sep="_"), "png", sep=".")
   ggsave(plotFile,
@@ -825,7 +938,7 @@ wholeBrainAnalysisMixedEffectsHubComparison <- function(metric,
   
   # print random effects of the model
   mod.coef <- ranef(mod)
-
+  
   t1 <- xtable(mod.coef$site,
                digits=c(0,2),
                display=c("s", "fg"),
@@ -890,6 +1003,7 @@ wholeBrainAnalysisMixedEffectsHubComparison <- function(metric,
   #                digits=c(0,1,1,2),
   #                display=c("s","f","d","fg"),
   #                caption=paste("ANOVA of linear mixed effects model for", metricName))
+  
   t5 <- xtable(summary(mod)[[10]],
                digits=c(0,2,2,1,2,2),
                display=c("s","fg","f","f","f","g"),
@@ -985,9 +1099,9 @@ wholeBrainAnalysisMixedEffectsHubComparison <- function(metric,
   #                display=c("s","f","d","fg"),
   #                caption=paste("ANOVA of linear mixed effects model for", metricName))
   t10 <- xtable(summary(mod)[[10]],
-               digits=c(0,2,2,1,2,2),
-               display=c("s","fg","f","f","f","g"),
-               caption=paste("FTD only Satterthwaite estimates of pvalues of linear mixed effects model for", metricName))
+                digits=c(0,2,2,1,2,2),
+                display=c("s","fg","f","f","f","g"),
+                caption=paste("FTD only Satterthwaite estimates of pvalues of linear mixed effects model for", metricName))
   
   
   print(t10,
@@ -1015,20 +1129,20 @@ wholeBrainAnalysisMixedEffectsHubComparison <- function(metric,
   mod.coef <- ranef(mod)
   
   t11 <- xtable(mod.coef$site,
-               digits=c(0,2),
-               display=c("s", "fg"),
-               caption = "Gene carriers only linear mixed effects model, site coefficients")
+                digits=c(0,2),
+                display=c("s", "fg"),
+                caption = "Gene carriers only linear mixed effects model, site coefficients")
   
   t12 <- xtable(mod.coef$gene,
-               digits=c(0,2),
-               display=c("s", "fg"),
-               caption = "Gene carriers only linear mixed effects model, gene coefficients")
+                digits=c(0,2),
+                display=c("s", "fg"),
+                caption = "Gene carriers only linear mixed effects model, gene coefficients")
   
   if(family){
     t13 <- xtable(mod.coef$Family,
-                 digits=c(0,2),
-                 display=c("s", "fg"),
-                 caption = "Gene carriers only linear mixed effects model, family coefficients")
+                  digits=c(0,2),
+                  display=c("s", "fg"),
+                  caption = "Gene carriers only linear mixed effects model, family coefficients")
   } else {
     t13 = NA
   }
@@ -1062,9 +1176,9 @@ wholeBrainAnalysisMixedEffectsHubComparison <- function(metric,
   vc <- VarCorr(mod)
   
   t14 <- xtable(data.frame(vc),
-               display=c("s","s","s","s","g","fg"),
-               digits=c(0,0,0,0,2,2),
-               caption="Gene carriers only variance of random effects")
+                display=c("s","s","s","s","g","fg"),
+                digits=c(0,0,0,0,2,2),
+                caption="Gene carriers only variance of random effects")
   
   print(t14,
         file=logFile,
@@ -1162,9 +1276,9 @@ graphTimeComparison <- function(metric,
     dF <- data.frame(dF, lobe=lobe)
   }
   
-#   # create dataframe to contrast gene negative with all gene positives
-#   dFgngp <- dF
-#   dFgngp$GS <- as.factor(sapply(dFgngp$GS, function(x) if(x!="gene negative"){return("gene positive")}else{return(as.character(x))}))
+  #   # create dataframe to contrast gene negative with all gene positives
+  #   dFgngp <- dF
+  #   dFgngp$GS <- as.factor(sapply(dFgngp$GS, function(x) if(x!="gene negative"){return("gene positive")}else{return(as.character(x))}))
   
   dFgn <- dF[dF$GS=="gene negative",]
   if(exclNeg){
@@ -1172,8 +1286,8 @@ graphTimeComparison <- function(metric,
     outFile = paste(outFile, "GenePos", sep="")
     dF$GS <- factor(as.character(dF$GS), levels=c("gene carriers", "FTD"))
   } #else {
-#     dF$GS <- sapply(dF$GS, function(x) if(x!="gene negative"){return("gene carriers")} else {return("gene negative")})
-#  }
+  #     dF$GS <- sapply(dF$GS, function(x) if(x!="gene negative"){return("gene carriers")} else {return("gene negative")})
+  #  }
   # dF$GS <- as.factor(as.character(dF$GS))
   
   dFgn$GS <- factor(as.character(dFgn$GS), levels=c("gene negative"))
@@ -1190,27 +1304,27 @@ graphTimeComparison <- function(metric,
   
   # plot linear model NOT MIXED EFFECTS
   dF.plot <- dF
-
+  
   p <- ggplot(dF.plot, aes_string(x="aoo", y="values", colour="GS", group="GS"))
   # p <- p + geom_point(size=ps)
   p <- p + scale_x_continuous(breaks=seq(-100,100,10))
   colList = unlist(cols[levels(dF.plot$GS)])
-
+  
   # plot simple linear model with all groups combined
   p5 <- ggplot(dF.plot, aes_string(x="aoo", y="values"))
   p5 <- p5 + scale_x_continuous(breaks=seq(-100,100,10))
   p5 <- p5 + geom_smooth(method=lm)
-#   int <- lm.simpLM[["coefficients"]][[1]]
-#   slope <- lm.simpLM[["coefficients"]][[2]]
-#   p5 <- p5 + geom_abline(intercept=int, slope=slope)
+  #   int <- lm.simpLM[["coefficients"]][[1]]
+  #   slope <- lm.simpLM[["coefficients"]][[2]]
+  #   p5 <- p5 + geom_abline(intercept=int, slope=slope)
   
   # from line below: paste(metricName, "linear regression", sep="\n")
   p5 <- p5 + labs(title=lobeTag, y=metricName, x="Estimated age of onset") + theme(axis.title.x=element_blank()) #, legend.key=element_rect(fill="white", colour="white"))
   p5 <- p5 + theme_bw() # + theme(legend.key = element_rect(colour="#FFFFFF", fill = "#FFFFFF"))
   p5 <- p5 + theme(text=element_text(size=tsz), plot.title=element_text(size=tsz))
-
+  
   plotOutName = paste(paste(outFile, "simpLM", sep="_"),"png",sep=".")
-
+  
   ggsave(plotOutName,
          plot=p5,
          scale=s,
@@ -1229,40 +1343,40 @@ graphTimeComparison <- function(metric,
   xMax = max(dF[dF$GS=="gene carriers","aoo"])
   yMin = xMin*coeffs["aoo","Estimate"] + coeffs["(Intercept)","Estimate"] + coeffs["aoo:GSFTD","Estimate"] 
   yMax = xMax*coeffs["aoo","Estimate"] + coeffs["(Intercept)","Estimate"] + coeffs["aoo:GSFTD","Estimate"]
-
+  
   xMin.FTD = min(dF[dF$GS=="FTD","aoo"])
   xMax.FTD = max(dF[dF$GS=="FTD","aoo"])
-
+  
   yMin.FTD = xMin.FTD*coeffs["aoo:GSFTD","Estimate"] + xMin.FTD*coeffs["aoo","Estimate"] + coeffs["(Intercept)","Estimate"] + coeffs["GSFTD","Estimate"]
   yMax.FTD = xMax.FTD*coeffs["aoo:GSFTD","Estimate"] + xMax.FTD*coeffs["aoo","Estimate"] + coeffs["(Intercept)","Estimate"] + coeffs["GSFTD","Estimate"]
- 
-#   p1 <- p1 + geom_segment(x=xMin,
-#                          xend=xMax,
-#                          y=yMin,
-#                          yend=yMax,
-#                          size=1.5,
-#                          colour=cols["gene carriers"])
-#   
-#   p1 <- p1 + geom_segment(x=xMin.FTD,
-#                          xend=xMax.FTD,
-#                          y=yMin.FTD,
-#                          yend=yMax.FTD,
-#                          size=1.5,
-#                          colour=cols["FTD"])
-
+  
+  #   p1 <- p1 + geom_segment(x=xMin,
+  #                          xend=xMax,
+  #                          y=yMin,
+  #                          yend=yMax,
+  #                          size=1.5,
+  #                          colour=cols["gene carriers"])
+  #   
+  #   p1 <- p1 + geom_segment(x=xMin.FTD,
+  #                          xend=xMax.FTD,
+  #                          y=yMin.FTD,
+  #                          yend=yMax.FTD,
+  #                          size=1.5,
+  #                          colour=cols["FTD"])
+  
   yMin.scale = min(yMin,yMin.FTD,yMax,yMax.FTD)
   yMax.scale = max(yMax,yMax.FTD,yMin,yMin.FTD)
   p1 <- p1 + scale_y_continuous(limits=c(yMin.scale, yMax.scale))
   
   p1 <- p1 + scale_x_continuous(limits=c(min(dF$aoo), max(dF$aoo)))
-
+  
   p1 <- p1 + scale_colour_manual(name="Group",values=as.vector(colList))
   # from line below: paste(metricName, "linear regression", sep="\n")
   p1 <- p1 + labs(title=lobeTag, y=metricName, x="Estimated age of onset") + theme(axis.title.x=element_blank(), legend.key=element_rect(fill="white", colour="white"))
   p1 <- p1 + theme_bw() + theme(legend.key = element_rect(colour="#FFFFFF", fill = "#FFFFFF"))
   p1 <- p1 + theme(text=element_text(size=tsz)) #, plot.title=element_text(size=tsz))
   plotOutName = paste(outFile,"png",sep=".")
-
+  
   ggsave(plotOutName,
          plot=p1,
          scale=s,
@@ -1306,7 +1420,7 @@ graphTimeComparison <- function(metric,
     colnames(cMat) <- c("carriersVsFTD")
     attr(dF$GS, "contrasts") = cMat
   }
-
+  
   if(family){
     mod <- lmer(values ~ aoo * GS + (1 | gene) + (1 | site) + (1 | Family),
                 data=dF,
@@ -1316,7 +1430,7 @@ graphTimeComparison <- function(metric,
                 data=dF,
                 REML=FALSE)
   }
-
+  
   ## plot random effects
   mod.coef <- ranef(mod)
   dF.plot.site <- data.frame(site = row.names(mod.coef$site),
@@ -1343,7 +1457,7 @@ graphTimeComparison <- function(metric,
                caption=paste("Linear mixed effects model, fixed effects", lobeTag),
                digits=c(0,2,2,2,2,2),
                display=c("s","fg","fg","fg","fg","fg"))
-
+  
   print(t3,
         include.rownames=TRUE,
         file=logFile,
@@ -1401,9 +1515,9 @@ graphTimeComparison <- function(metric,
   
   # fixed effects
   t8 <- xtable(summary(mod)[[10]],
-                    digits=c(0,2,2,1,2,2),
-                    display=c("s","fg","f","f","f","g"),
-                    caption=paste("Satterthwaite estimates of pvalues of linear mixed effects model for", metricName, lobeTag))
+               digits=c(0,2,2,1,2,2),
+               display=c("s","fg","f","f","f","g"),
+               caption=paste("Satterthwaite estimates of pvalues of linear mixed effects model for", metricName, lobeTag))
   
   # now run the mixed effects model comparing gene negative with gene positive group
   if(!exclNeg){
@@ -1411,7 +1525,7 @@ graphTimeComparison <- function(metric,
     rownames(cMat) <- levels(dF$GS)
     colnames(cMat) <- c("geneNegVsGenePos")
     attr(dF$GS, "contrasts") = cMat
-
+    
     if(family){
       mod <- lmer(values ~ aoo * GS + (1 | gene) + (1 | site) + (1 | Family),
                   data=dF,
@@ -1456,12 +1570,12 @@ graphTimeComparison <- function(metric,
           append=TRUE)
     
     t10 <- xtable(data.frame(StdDev = c(attributes(VarCorr(mod)[[1]])[["stddev"]],
-                                       attributes(VarCorr(mod)[[2]])[["stddev"]],
-                                       attributes(VarCorr(mod))[["sc"]]),
-                            row.names = c("Family", "Site", "Residual")),                          
-                 caption=paste("Linear mixed effects model, random effects", lobeTag),
-                 digits=c(0,2),
-                 display=c("s","fg"))
+                                        attributes(VarCorr(mod)[[2]])[["stddev"]],
+                                        attributes(VarCorr(mod))[["sc"]]),
+                             row.names = c("Family", "Site", "Residual")),                          
+                  caption=paste("Linear mixed effects model, random effects", lobeTag),
+                  digits=c(0,2),
+                  display=c("s","fg"))
     
     print(t10,
           include.rownames=TRUE,
@@ -1472,9 +1586,9 @@ graphTimeComparison <- function(metric,
     vc <- VarCorr(mod)
     
     t11 <- xtable(data.frame(vc),
-                 display=c("s","s","s","s","g","fg"),
-                 digits=c(0,0,0,0,2,2),
-                 caption=paste("Variance of random effects", lobeTag))
+                  display=c("s","s","s","s","g","fg"),
+                  digits=c(0,0,0,0,2,2),
+                  caption=paste("Variance of random effects", lobeTag))
     
     print(t11,
           file=logFile,
@@ -1496,9 +1610,9 @@ graphTimeComparison <- function(metric,
     modComparison <- anova(mod,nulMod)
     
     t12 <- xtable(modComparison,
-                 caption = paste("Assessment of whether there is a difference between slopes of gene positive and gene affected groups by comparing models including and excluding and interaction between age at onset and gene status", lobeTag),
-                 digits = c(0,0,2,2,2,2,2,2,2),
-                 display = c("s","d","fg","fg","fg","fg","d","fg","fg"))
+                  caption = paste("Assessment of whether there is a difference between slopes of gene positive and gene affected groups by comparing models including and excluding and interaction between age at onset and gene status", lobeTag),
+                  digits = c(0,0,2,2,2,2,2,2,2),
+                  display = c("s","d","fg","fg","fg","fg","d","fg","fg"))
     
     print(t12,
           include.rownames=TRUE,
@@ -1507,9 +1621,9 @@ graphTimeComparison <- function(metric,
     
     # fixed effects
     t13 <- xtable(summary(mod)[[10]],
-                 digits=c(0,2,2,1,2,2),
-                 display=c("s","fg","f","f","f","g"),
-                 caption=paste("Satterthwaite estimates of pvalues of linear mixed effects model for", metricName, lobeTag))
+                  digits=c(0,2,2,1,2,2),
+                  display=c("s","fg","f","f","f","g"),
+                  caption=paste("Satterthwaite estimates of pvalues of linear mixed effects model for", metricName, lobeTag))
   } else {
     p6=NA
     p7=NA
@@ -1519,22 +1633,22 @@ graphTimeComparison <- function(metric,
     t11=NA
     t12=NA
   }
-
+  
   return(list(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12,
               p1, p2, p3, p4, p5, p6, p7, p8))
 }
-  
+
 graphTimeComparisonNL <- function(metric,
-                                metricName,
-                                sp, # spike percentage
-                                cols,
-                                startvec=NULL, # starting vectors for equation with quadratic term
-                                startvecCub=c(dc=0.000000001), # starting vectors for equation with cubic term
-                                weighted=TRUE, # is this a weighted metric?
-                                outDir="wholeBrainVsAOOResults",
-                                edgePC=3,
-                                h=30,w=45,s=4,tsz=12,ps=4,
-                                sink=TRUE){
+                                  metricName,
+                                  sp, # spike percentage
+                                  cols,
+                                  startvec=NULL, # starting vectors for equation with quadratic term
+                                  startvecCub=c(dc=0.000000001), # starting vectors for equation with cubic term
+                                  weighted=TRUE, # is this a weighted metric?
+                                  outDir="wholeBrainVsAOOResults",
+                                  edgePC=3,
+                                  h=30,w=45,s=4,tsz=12,ps=4,
+                                  sink=TRUE){
   # create output directory
   dir.create(outDir, showWarnings = FALSE)
   
@@ -1590,9 +1704,9 @@ graphTimeComparisonNL <- function(metric,
     while(affirm=="n"){
       print(pp)
       
-#       Asym = as.numeric(readline(prompt="Asymptote of the y-axis: "))
-#       R0   = as.numeric(readline(prompt="the value of y when x=0: "))
-#       lrc  = as.numeric(readline(prompt="natural log of the rate of decline (guess -1 if not sure): "))
+      #       Asym = as.numeric(readline(prompt="Asymptote of the y-axis: "))
+      #       R0   = as.numeric(readline(prompt="the value of y when x=0: "))
+      #       lrc  = as.numeric(readline(prompt="natural log of the rate of decline (guess -1 if not sure): "))
       aq = as.numeric(readline(prompt = "Constant term: "))
       bq = as.numeric(readline(prompt = "x multiplier:" ))
       cq = as.numeric(readline(prompt = "quadratic multiplier: "))
@@ -1611,24 +1725,24 @@ graphTimeComparisonNL <- function(metric,
   
   # save starting vectors for quadratic non-linear regression
   qStartvec = startvec
-#   lapply(list("Starting values are as follows.",
-#               paste("Constant:", startvec["aq"]),
-#               paste("Multiplier of x term:", startvec["bq"]),
-#               paste("Multiplier of quadratic term:", startvec["cq"])),
-#          function(x) print(x)
-#         )
+  #   lapply(list("Starting values are as follows.",
+  #               paste("Constant:", startvec["aq"]),
+  #               paste("Multiplier of x term:", startvec["bq"]),
+  #               paste("Multiplier of quadratic term:", startvec["cq"])),
+  #          function(x) print(x)
+  #         )
   
   # run non-linear quadratic model
   # dF <- cbind(dF, data.frame(aooNeg=dF$aoo*-1))  # make age of onset negative so that an asymptotic fit can be achieved.
-
+  
   # The following line calculates the non-linear model
   # the random elements take in to account the difference in graph measures depending on the scanner site (Asym|site) and the age at onset between genes (aooNeg|gene)
   # at present the function is an asymptote.
-
+  
   nlmq <- nlmer(values ~ SSquadFun(aoo, aq, bq, cq) ~ (aoo|gene) + (aq|site), data=dF, start = startvec)
   
   print(summary(nlmq))
-
+  
   # plot estimated values
   dF.plot <- dF
   p <- ggplot(dF.plot, aes_string(x="aoo", y="values", colour="GS", group="GS"))
@@ -1646,9 +1760,9 @@ graphTimeComparisonNL <- function(metric,
   pq <- pq + labs(title=paste(metricName, "non-linear regression, quadratic", sep="\n"), y=metricName, x="Estimated time from onset")# + theme(axis.title.x=element_blank())
   pq <- pq + theme(text=element_text(size=tsz), plot.title=element_text(size=tsz), plot.title=element_text(size=tsz))
   
-#   print(paste("Saving",paste(outDir,
-#                        paste(paste(metric, "nonLinearEstimatesQuadratic",sep="_"),"png",sep="."),
-#                        sep="/")))
+  #   print(paste("Saving",paste(outDir,
+  #                        paste(paste(metric, "nonLinearEstimatesQuadratic",sep="_"),"png",sep="."),
+  #                        sep="/")))
   plotFile = paste(paste(outFile, "nonLinearEstimatesQuadratic",sep="_"), "png", sep=".")
   ggsave(plotFile,
          scale=s,
@@ -1683,20 +1797,20 @@ graphTimeComparisonNL <- function(metric,
   startvec = c(ac=ac, bc=bc, cc=cc, dc=dc)
   cStartvec = startvec # save starting values for the cubic non-linear regression model
   
-#   lapply(list("Starting values are as follows.",
-#               paste("Constant:", startvec["ac"]),
-#               paste("Multiplier of x term:", startvec["bc"]),
-#               paste("Multiplier of quadratic term:", startvec["cc"]),
-#               paste("Multiplier of cubic term:", startvec["dc"])),
-#          function(x) print(x)
-#   )
+  #   lapply(list("Starting values are as follows.",
+  #               paste("Constant:", startvec["ac"]),
+  #               paste("Multiplier of x term:", startvec["bc"]),
+  #               paste("Multiplier of quadratic term:", startvec["cc"]),
+  #               paste("Multiplier of cubic term:", startvec["dc"])),
+  #          function(x) print(x)
+  #   )
   
   # run non-linear quadratic model
   # The following line calculates the non-linear model
   # the random elements take in to account the difference in graph measures depending on the scanner site (aq|site) and the age at onset between genes (aooNeg|gene)
   # this equation includes a cubic term
   nlmc <- nlmer(values ~ SScubicFun(aoo, ac, bc, cc, dc) ~ (aoo|gene) + (ac|site), data=dF, start = startvec)
-
+  
   # print a summary of the model
   print(summary(nlmc))
   
@@ -1714,9 +1828,9 @@ graphTimeComparisonNL <- function(metric,
   pc <- pc + labs(title=paste(metricName, "non-linear regression, cubic", sep="\n"), y=metricName, x="Estimated time from onset")# + theme(axis.title.x=element_blank())
   pc <- pc + theme(text=element_text(size=tsz), plot.title=element_text(size=tsz))
   
-#   print(paste("Saving",paste(outDir,
-#                              paste(paste(metric, "nonLinearEstimatesCubic",sep="_"),"png",sep="."),
-#                              sep="/")))
+  #   print(paste("Saving",paste(outDir,
+  #                              paste(paste(metric, "nonLinearEstimatesCubic",sep="_"),"png",sep="."),
+  #                              sep="/")))
   plotFile = paste(paste(outFile, "nonLinearEstimatesCubic",sep="_"),"png",sep=".")
   ggsave(plotFile,
          scale=s,
@@ -1752,13 +1866,13 @@ graphTimeComparisonNL <- function(metric,
               summary(nlmq), # summary of non-linear quatric non-linear regression
               summary(nlmc), # summary of non-linear cubic non-linear regression
               qvsc.anova     # ANOVA between models with quadratic and cubic terms
-              )
+  )
   )
 }
 
 
 # import spike percentage data
-# sp <- read.xlsx("../all_sm_thld10_SP.xlsx", sheetIndex = 1)
+# sp <- read.xlsx("/home/tim/GENFI/all_sm_thld10_SP.xlsx", sheetIndex = 1)
 
 # metrics = list("degree"="connection strength",
 #                "ge"="global efficiency",
@@ -1804,13 +1918,13 @@ startVecListQ = list(degree        = c(aq = 29.8,   bq = 0.000001, cq = 0.000001
                      betCentNorm   = c(aq = 1.30,   bq = 0.000001, cq = 0.000001),
                      closeCent     = c(aq = 0.40,   bq = 0.000001, cq = 0.000001),
                      closeCentNorm = c(aq = 0.85,   bq = 0.000001, cq = 0.000001)
-                     )
+)
 
 cols <- list("gene negative"="#E69F00",
              "gene carriers"="#56B4E9",
              "FTD"="#D55E00",
              "estimates"="#000000"
-             )
+)
 
 # startVecListC= list(geNorm = c(dc=0.0001),
 #                     plNorm = c(dc=0.001))
@@ -1883,16 +1997,16 @@ breakpoint <- function(metric,
   dF <- merge(dF, dF.aoo, by="wbic")
   dF <- unique(dF) # remove duplicates that may have sneaked in
   
-#   # filter out affected subjects less than t=0 and gene positive greater than t=0
-#   dF <- rbind(dF[dF$GS=="FTD" && dF$aoo>=0,],
-#               dF[dF$GS=="gene carriers" && dF$aoo<=0,])
+  #   # filter out affected subjects less than t=0 and gene positive greater than t=0
+  #   dF <- rbind(dF[dF$GS=="FTD" && dF$aoo>=0,],
+  #               dF[dF$GS=="gene carriers" && dF$aoo<=0,])
   
   # create model
   mod <- lm(values ~ aoo, data=dF)
-
+  
   # do segmentation analysis assuming the breakpoint is at 0
   br <- segmented(mod, seg.Z = ~aoo, psi = c(aoo=0.))
-
+  
   # get summary
   br.summary <- summary(br)
   
@@ -2025,12 +2139,12 @@ breakPointDiscontinuous <- function(metric,
   
   # define breakpoint
   bkpt = 0.
-
-#   piecewise <- lmer(values ~ aoo*(aoo<bkpt) + aoo*(aoo>bkpt) + (1 | gene) + (1 | site) + (1 | Family),
-#                     data=dF,
-#                     REML=FALSE)
+  
+  #   piecewise <- lmer(values ~ aoo*(aoo<bkpt) + aoo*(aoo>bkpt) + (1 | gene) + (1 | site) + (1 | Family),
+  #                     data=dF,
+  #                     REML=FALSE)
   piecewise <- lm (values ~ aoo*(aoo<bkpt) + aoo*(aoo>=bkpt), data=dF)
-
+  
   t1 <- xtable(summary(piecewise),
                caption = paste("Summary of discontinuous piecewise regression analysis",lobeTag),
                digits = c(0,2,2,2,2),
@@ -2041,9 +2155,9 @@ breakPointDiscontinuous <- function(metric,
         append=TRUE)
   
   # compare with null model
-#   nulMod <- lmer(values ~ aoo + (1 | gene) + (1 | site) + (1 | Family),
-#                   data=dF,
-#                   REML=FALSE)
+  #   nulMod <- lmer(values ~ aoo + (1 | gene) + (1 | site) + (1 | Family),
+  #                   data=dF,
+  #                   REML=FALSE)
   nulMod <- lm(values ~ aoo,
                data=dF)
   
@@ -2074,7 +2188,7 @@ breakPointDiscontinuous <- function(metric,
   if(exclNeg==FALSE){
     yVal = min(dF$aoo)*gnlm$coefficients[[2]] + gnlm$coefficients[[1]]
     yendVal = max(dF$aoo)*gnlm$coefficients[[2]] + gnlm$coefficients[[1]]
-
+    
     if(!normalise){
       p <- p + geom_segment(x=min(dFgn$aoo),
                             xend=max(dFgn$aoo),
@@ -2108,7 +2222,7 @@ breakPointDiscontinuous <- function(metric,
   yMin.upper <- min(dF$aoo)*(piecewise.CIs[2,2]+piecewise.CIs[5,2])+y+piecewise.CIs[3,2]
   yMax.upper <- max(dF$aoo)*piecewise.CIs[2,2]+piecewise.CIs[1,2]
   yEndVal.upper <- y+min(piecewise.CIs[3,2],piecewise.CIs[3,1])
-
+  
   if(normalise){
     # calculate gene negative values
     y.GeneNeg <- gnlm$coefficients[[1]] 
@@ -2135,21 +2249,21 @@ breakPointDiscontinuous <- function(metric,
     yVal.lower = y.lower
     yVal.upper = y.upper
   }
-
+  
   # set colours
   colList = unlist(cols[levels(dF$GS)])
   
-#   #significance areas
-#   p <- p + geom_ribbon(ymin=seq(yMin.lower, yEndVal.lower,length.out = length(dF[,1])),
-#                        ymax=seq(yMin.upper, yEndVal.upper,length.out = length(dF[,1])),
-#                        x=seq(min(dF$aoo),0., length.out = length(dF[,1])),
-#                        fill=colList["gene carriers"], alpha=0.5)
-#   
-#   p <- p + geom_ribbon(ymin=seq(yVal.lower, yMax.lower,length.out = length(dF[,1])),
-#                        ymax=seq(yVal.upper, yMax.upper,length.out = length(dF[,1])),
-#                        x=seq(0., max(dF$aoo), length.out = length(dF[,1])),
-#                        fill=colList["FTD"], alpha=0.5)
-#   
+  #   #significance areas
+  #   p <- p + geom_ribbon(ymin=seq(yMin.lower, yEndVal.lower,length.out = length(dF[,1])),
+  #                        ymax=seq(yMin.upper, yEndVal.upper,length.out = length(dF[,1])),
+  #                        x=seq(min(dF$aoo),0., length.out = length(dF[,1])),
+  #                        fill=colList["gene carriers"], alpha=0.5)
+  #   
+  #   p <- p + geom_ribbon(ymin=seq(yVal.lower, yMax.lower,length.out = length(dF[,1])),
+  #                        ymax=seq(yVal.upper, yMax.upper,length.out = length(dF[,1])),
+  #                        x=seq(0., max(dF$aoo), length.out = length(dF[,1])),
+  #                        fill=colList["FTD"], alpha=0.5)
+  #   
   # p <- p + geom_point(size=ps, shape=16, aes_string(colour="GS"))
   p <- p + geom_segment(x=min(dF$aoo),
                         xend=0.,
@@ -2175,7 +2289,7 @@ breakPointDiscontinuous <- function(metric,
                        linetype="blank",
                        data=dF[dF$aoo>0.,],
                        fill=colList["FTD"], alpha=0.5)
-
+  
   # add significance indicator
   pVal = summary(piecewise)[[4]][4,4]
   if(pVal< 0.05){
@@ -2189,88 +2303,88 @@ breakPointDiscontinuous <- function(metric,
     } else {
       sigInd = "*"
     }
-    ymin = ggplot_build(p)$panel$ranges[[1]]$y.range[1]
-    ymax = ggplot_build(p)$panel$ranges[[1]]$y.range[2]
+    ymin = ggplot_build(p)$layout$panel_scales_y[[1]]$range$range[[1]]
+    ymax = ggplot_build(p)$layout$panel_scales_y[[1]]$range$range[[2]]
     ygap = ymax - ymin
     
     # set the y position
     ypos = ymin+ygap*0.9
     
     p <- p + annotate("text", x=0, y=ypos, label=sigInd, colour="black", size=16)
-
+    
   }
-
-#   p <- p + geom_segment(x=min(dF$aoo),
-#                         xend=0,
-#                         y=yMin.lower,
-#                         yend=yEndVal.lower,
-#                         size=1.5,
-#                         colour="red")
-#   
-#   p <- p + geom_segment(x=0.,
-#                         xend=max(dF$aoo),
-#                         y=yVal.lower,
-#                         yend=yMax.lower,
-#                         size=1.5,
-#                         colour="red")
-#   
-#   p <- p + geom_segment(x=min(dF$aoo),
-#                         xend=0,
-#                         y=yMin.upper,
-#                         yend=yEndVal.upper,
-#                         size=1.5,
-#                         colour="red")
-#   
-#   p <- p + geom_segment(x=0.,
-#                         xend=max(dF$aoo),
-#                         y=yVal.upper,
-#                         yend=yMax.upper,
-#                         size=1.5,
-#                         colour="red")
-#   
-
-#   # specify y axis
-#   yList <- c(yMin,yEndVal,yMax,yVal,
-#              yEndVal.lower, yEndVal.upper,
-#              yMin.lower,yMin.upper,
-#              yMax.lower,yMax.upper,
-#              yVal.lower,yVal.upper,
-#              yEndVal.lower, yEndVal.upper,
-#              yMin.lower,yMin.upper,
-#              yMax.lower,yMax.upper,
-#              yVal.lower,yVal.upper)
-# 
-#   yLow <- min(yList)
-#   yHigh <- max(yList)
-#   
-#   yGap = yHigh-yLow
-#   yMin.axis = yLow - 0.05*yGap
-#   yMax.axis = yHigh + 0.05*yGap
-# 
-#   yMin.lab <- round(yMin.axis, digits=1)
-#   yMax.lab <- round(yMax.axis, digits=1)
-#   
-#   if(yGap>1){
-#     dg = 0
-#   } else if(yGap>0.1){
-#     dg = 1
-#   } else if(yGap>0.01){
-#     dg = 2
-#   } else if(yGap>0.001){
-#     dg=3
-#   }
-#    
-#   byVal = round((yMax.lab - yMin.lab)/8, digits=dg)
-#   if(byVal==0){byVal=1}
-# 
-#   breakList = seq(yMin.lab-byVal, yMax.lab+byVal, by=byVal)
-#   
-#   # centre on 0
-#   breakList = breakList-min(sapply(breakList, function(x) sqrt(x^2)))
-#   
-#   p <- p + scale_y_continuous(limits=c(yMin.axis, yMax.axis),
-#                               breaks = breakList)
-#   
+  
+  #   p <- p + geom_segment(x=min(dF$aoo),
+  #                         xend=0,
+  #                         y=yMin.lower,
+  #                         yend=yEndVal.lower,
+  #                         size=1.5,
+  #                         colour="red")
+  #   
+  #   p <- p + geom_segment(x=0.,
+  #                         xend=max(dF$aoo),
+  #                         y=yVal.lower,
+  #                         yend=yMax.lower,
+  #                         size=1.5,
+  #                         colour="red")
+  #   
+  #   p <- p + geom_segment(x=min(dF$aoo),
+  #                         xend=0,
+  #                         y=yMin.upper,
+  #                         yend=yEndVal.upper,
+  #                         size=1.5,
+  #                         colour="red")
+  #   
+  #   p <- p + geom_segment(x=0.,
+  #                         xend=max(dF$aoo),
+  #                         y=yVal.upper,
+  #                         yend=yMax.upper,
+  #                         size=1.5,
+  #                         colour="red")
+  #   
+  
+  #   # specify y axis
+  #   yList <- c(yMin,yEndVal,yMax,yVal,
+  #              yEndVal.lower, yEndVal.upper,
+  #              yMin.lower,yMin.upper,
+  #              yMax.lower,yMax.upper,
+  #              yVal.lower,yVal.upper,
+  #              yEndVal.lower, yEndVal.upper,
+  #              yMin.lower,yMin.upper,
+  #              yMax.lower,yMax.upper,
+  #              yVal.lower,yVal.upper)
+  # 
+  #   yLow <- min(yList)
+  #   yHigh <- max(yList)
+  #   
+  #   yGap = yHigh-yLow
+  #   yMin.axis = yLow - 0.05*yGap
+  #   yMax.axis = yHigh + 0.05*yGap
+  # 
+  #   yMin.lab <- round(yMin.axis, digits=1)
+  #   yMax.lab <- round(yMax.axis, digits=1)
+  #   
+  #   if(yGap>1){
+  #     dg = 0
+  #   } else if(yGap>0.1){
+  #     dg = 1
+  #   } else if(yGap>0.01){
+  #     dg = 2
+  #   } else if(yGap>0.001){
+  #     dg=3
+  #   }
+  #    
+  #   byVal = round((yMax.lab - yMin.lab)/8, digits=dg)
+  #   if(byVal==0){byVal=1}
+  # 
+  #   breakList = seq(yMin.lab-byVal, yMax.lab+byVal, by=byVal)
+  #   
+  #   # centre on 0
+  #   breakList = breakList-min(sapply(breakList, function(x) sqrt(x^2)))
+  #   
+  #   p <- p + scale_y_continuous(limits=c(yMin.axis, yMax.axis),
+  #                               breaks = breakList)
+  #   
   # from line below: title=paste(metricName, "discontinuous breakpoint analysis", sep="\n"), 
   p <- p + labs(title=" ", y=paste(metricName, "(z-score)"), x="Years from estimated age of onset") + theme(axis.title.x=element_blank(), legend.key=element_rect(fill="white", colour="white"))
   p <- p + theme_bw() + theme(legend.key = element_rect(colour="#FFFFFF", fill = "#FFFFFF"))
@@ -2307,18 +2421,18 @@ demographics <- function(demog, typeList, sp=NA, exclNeg=FALSE){
   if(is.data.frame(sp)){dF <- applySP(dF, sp)}
   
   type=typeList[demog]
-
+  
   # merge with demographic data
   if(type=="none"){  # fudge to read the Diagnosis (Dx) column in this file
-    dF.demog <- read.table("../GENFI_DF1_MASTER.csv", sep="\t", header = TRUE)
+    dF.demog <- read.table("/home/tim/GENFI/GENFI_DF1_MASTER.csv", sep="\t", header = TRUE)
     names(dF.demog)[2] <- "wbic"
   } else {
-    dF.demog <- read.table("../genfi_Subjects_sjones_1_22_2015_17_47_47_restructure_summary.csv", sep="\t", header = TRUE)
+    dF.demog <- read.table("/home/tim/GENFI/genfi_Subjects_sjones_1_22_2015_17_47_47_restructure_summary.csv", sep="\t", header = TRUE)
     names(dF.demog)[4] <- "wbic"
     dF.demog <- dF.demog[dF.demog$duplicate!=1,] # remove duplicates that may have sneaked in
   }
   
-   
+  
   dF.demog <- dF.demog[which(dF.demog$wbic %in% dF$wbic),]
   
   dF <- merge(dF, dF.demog[,-which(names(dF.demog)=="GS")],
@@ -2326,7 +2440,7 @@ demographics <- function(demog, typeList, sp=NA, exclNeg=FALSE){
               all.x=TRUE,
               all.y=FALSE)
   names(dF)[which(names(dF)==demog)] <- "demog"
-
+  
   # create summary table of demographic data
   if(type=="continuous"){
     dF.wb = ddply(dF, .(GS), summarise,
@@ -2353,7 +2467,7 @@ demographics <- function(demog, typeList, sp=NA, exclNeg=FALSE){
     row.names(dF.wb) <- dF.wb[,"GS"]
     dF.wb <- dF.wb[,-1]
   }
-
+  
   # do statistical test
   if(type=="continuous"){
     # ANOVA
@@ -2413,8 +2527,8 @@ demographics <- function(demog, typeList, sp=NA, exclNeg=FALSE){
                   negVsCarrier.p=negVsCarrier[["p.value"]],
                   FTDVsCarrier.stat=FTDVsCarrier[["statistic"]],
                   FTDVsCarrier.p=FTDVsCarrier[["p.value"]]
-                  )
-             )
+      )
+      )
     }
   } else if(type=="ordinal"){
     if(sum(dF.wb[,"count2"]!=0)){ # in the event there are three categories of the demographic
@@ -2473,7 +2587,7 @@ demographics <- function(demog, typeList, sp=NA, exclNeg=FALSE){
                 sep="/")
     }
     dF.cst <- chisq.test(dF.wb) # perform chi-square test
-
+    
     # post-hoc chi-square
     FTDVsCarrier <- chisq.test(dF.wb[c("FTD","gene carriers"),])
     
@@ -2485,14 +2599,14 @@ demographics <- function(demog, typeList, sp=NA, exclNeg=FALSE){
                   ChiSq=dF.cst$statistic,
                   geneCarriers=geneCarriers,
                   FTD=FTD,
-#                   negVsFTD.stat=NA,
-#                   negVsFTD.p=NA,
-#                   negVsCarrier.stat=NA,
-#                   negVsCarrier.p=NA,
+                  #                   negVsFTD.stat=NA,
+                  #                   negVsFTD.p=NA,
+                  #                   negVsCarrier.stat=NA,
+                  #                   negVsCarrier.p=NA,
                   FTDVsCarrier.stat=FTDVsCarrier[["statistic"]],
                   FTDVsCarrier.p=FTDVsCarrier[["p.value"]]
-                  )
-             )
+      )
+      )
     } else {
       return(list(Demographic=demog,
                   DOF=dF.cst$parameter,
@@ -2508,35 +2622,35 @@ demographics <- function(demog, typeList, sp=NA, exclNeg=FALSE){
                   negVsCarrier.p=negVsCarrier[["p.value"]],
                   FTDVsCarrier.stat=FTDVsCarrier[["statistic"]],
                   FTDVsCarrier.p=FTDVsCarrier[["p.value"]]
-                  )
-             )
+      )
+      )
     }
     
   } else if(type=="none") {
-      if(!exclNeg){ # if negatives are excluded
-        geneNeg=paste(dF.wb[["gene negative", "bvFTD"]],
-                      dF.wb[["gene negative", "PPA"]],
-                      dF.wb[["gene negative", "FTDALS"]],
-                      dF.wb[["gene negative", "NOS"]],
-                      sep="/")
-      } else { # if negatives are included
-        geneNeg=NA
-        negVsFTD = list(p.value=NA,
-                        statistic=NA)
-        negVsCarrier = list(p.value=NA,
-                            statistic=NA)
-      }
-      geneCarriers=paste(dF.wb[["gene carriers", "bvFTD"]],
-                         dF.wb[["gene carriers", "PPA"]],
-                         dF.wb[["gene carriers", "FTDALS"]],
-                         dF.wb[["gene carriers", "NOS"]],
-                         sep="/")
-      
-      FTD=paste(dF.wb[["FTD", "bvFTD"]],
-                dF.wb[["FTD", "PPA"]],
-                dF.wb[["FTD", "FTDALS"]],
-                dF.wb[["FTD", "NOS"]],
-                sep="/")
+    if(!exclNeg){ # if negatives are excluded
+      geneNeg=paste(dF.wb[["gene negative", "bvFTD"]],
+                    dF.wb[["gene negative", "PPA"]],
+                    dF.wb[["gene negative", "FTDALS"]],
+                    dF.wb[["gene negative", "NOS"]],
+                    sep="/")
+    } else { # if negatives are included
+      geneNeg=NA
+      negVsFTD = list(p.value=NA,
+                      statistic=NA)
+      negVsCarrier = list(p.value=NA,
+                          statistic=NA)
+    }
+    geneCarriers=paste(dF.wb[["gene carriers", "bvFTD"]],
+                       dF.wb[["gene carriers", "PPA"]],
+                       dF.wb[["gene carriers", "FTDALS"]],
+                       dF.wb[["gene carriers", "NOS"]],
+                       sep="/")
+    
+    FTD=paste(dF.wb[["FTD", "bvFTD"]],
+              dF.wb[["FTD", "PPA"]],
+              dF.wb[["FTD", "FTDALS"]],
+              dF.wb[["FTD", "NOS"]],
+              sep="/")
     if(exclNeg){
       return(list(Demographic=demog,
                   DOF=NA,
@@ -2586,7 +2700,7 @@ scanSummaries <- function(scanField, scanTypeList, sp=NA, exclNeg=FALSE){
   type=scanTypeList[scanField]
   
   # merge with scanFieldraphic data
-  dF.scanField <- read.table("../genfi_Subjects_sjones_1_22_2015_17_47_47_restructure_summary.csv", sep="\t", header = TRUE)
+  dF.scanField <- read.table("/home/tim/GENFI/genfi_Subjects_sjones_1_22_2015_17_47_47_restructure_summary.csv", sep="\t", header = TRUE)
   names(dF.scanField)[4] <- "wbic"
   dF.scanField <- dF.scanField[dF.scanField$scan_duration>100,] # exclude lines with subjects with only short scans
   
@@ -2630,8 +2744,9 @@ clinicalScores <- function(metric,
                            family=FALSE,
                            lobe=NA, # define the lobe of the brain to examine
                            hubT=NA, # hub threshold
-                           csFile="clinicalScores.csv"
-                           ){
+                           csFile="clinicalScores.csv",
+                           plotPoints=FALSE
+){
   
   # create output directory
   dir.create(outDir, showWarnings = FALSE)
@@ -2695,7 +2810,7 @@ clinicalScores <- function(metric,
   } else {
     lobeTag=""
   }
-
+  
   if(!exclNeg){
     dF.wb.summary = ddply(dF.wb, .(), summarise,
                           "gene negative" = paste(sapply(mean(values[GS=="gene negative"], na.rm = TRUE), fn, a=2,b=3),
@@ -2734,9 +2849,9 @@ clinicalScores <- function(metric,
   
   # merge network and imaging data
   dF.wb <- merge(dF.wb, csdF,
-              by = c("wbic"),
-              all.x=TRUE,
-              all.y=FALSE)
+                 by = c("wbic"),
+                 all.x=TRUE,
+                 all.y=FALSE)
   
   # report the number of subjects with/without data
   ptSum = ddply(dF.wb, .(gene), summarise,
@@ -2762,14 +2877,14 @@ clinicalScores <- function(metric,
   # perform mixed effects analysis
   # ANOVA of the differences
   # set contrasts
-#   mat = rbind(c(-1,1), c(0,1), c(1,0)) # FTD -1, gene negative 1
-#   cMat = ginv(mat)
-#   
-#   colnames(cMat) = c("FTD vs gene carriers", "gene carriers", "FTD")
-#   rownames(cMat) = levels(dF.wb$GS)
-#   
-#   contrasts(dF.wb$GS) = contr.helmert(dF.wb$GS,1)
-#   
+  #   mat = rbind(c(-1,1), c(0,1), c(1,0)) # FTD -1, gene negative 1
+  #   cMat = ginv(mat)
+  #   
+  #   colnames(cMat) = c("FTD vs gene carriers", "gene carriers", "FTD")
+  #   rownames(cMat) = levels(dF.wb$GS)
+  #   
+  #   contrasts(dF.wb$GS) = contr.helmert(dF.wb$GS,1)
+  #   
   if(family){
     mod <- lmer(score ~ values*relevel(GS, ref="FTD") + Age + (1 | gene) + (1 | site) + (1 | Family),
                 data=dF.wb,
@@ -2782,11 +2897,11 @@ clinicalScores <- function(metric,
     mod <- lmer(score ~ values*relevel(GS, ref="FTD") + Age + (1 | gene) + (1 | site),
                 data=dF.wb,
                 REML=FALSE)
-                #contrasts = list(GS=contr.helmert))
+    #contrasts = list(GS=contr.helmert))
     
     mod.gc <- lmer(score ~ values*relevel(GS, ref="gene carriers") + Age + (1 | gene) + (1 | site),
-                data=dF.wb,
-                REML=FALSE)
+                   data=dF.wb,
+                   REML=FALSE)
     #contrasts = list(GS=contr.helmert))
   }
   
@@ -2860,9 +2975,9 @@ clinicalScores <- function(metric,
         append=TRUE)
   
   t8 <- xtable(summary(mod.gc)[[10]],
-                digits=c(0,2,2,1,2,2),
-                display=c("s","fg","f","f","f","g"),
-                caption=paste("Satterthwaite estimates of pvalues of linear mixed effects model for", csName, metricName,lobeTag))
+               digits=c(0,2,2,1,2,2),
+               display=c("s","fg","f","f","f","g"),
+               caption=paste("Satterthwaite estimates of pvalues of linear mixed effects model for", csName, metricName,lobeTag))
   
   print(t8,
         file=logFile,
@@ -2871,12 +2986,12 @@ clinicalScores <- function(metric,
   # now repeat with model excluding the interaction between genetic status to see if there is a correlation between graph and clinical measures
   if(family){
     mod2 <- lmer(score ~ values + GS + Age + (1 | gene) + (1 | site) + (1 | Family),
-                data=dF.wb,
-                REML=FALSE)
+                 data=dF.wb,
+                 REML=FALSE)
   } else {
     mod2 <- lmer(score ~ values + GS + Age + (1 | gene) + (1 | site),
-                data=dF.wb,
-                REML=FALSE)
+                 data=dF.wb,
+                 REML=FALSE)
   }
   
   # print random effects of the model
@@ -2888,15 +3003,15 @@ clinicalScores <- function(metric,
                caption = paste("Linear mixed effects model excluding gene interaction term, site coefficients",lobeTag, metricName, csName))
   
   t10 <- xtable(mod2.coef$gene,
-               digits=c(0,2),
-               display=c("s", "fg"),
-               caption = paste("Linear mixed effects model excluding gene interaction term, gene coefficients",lobeTag, metricName, csName))
+                digits=c(0,2),
+                display=c("s", "fg"),
+                caption = paste("Linear mixed effects model excluding gene interaction term, gene coefficients",lobeTag, metricName, csName))
   
   if(family){
     t11 <- xtable(mod2.coef$Family,
-                 digits=c(0,2),
-                 display=c("s", "fg"),
-                 caption = paste("Linear mixed effects model excluding gene interaction term, family coefficients",lobeTag, metricName, csName))
+                  digits=c(0,2),
+                  display=c("s", "fg"),
+                  caption = paste("Linear mixed effects model excluding gene interaction term, family coefficients",lobeTag, metricName, csName))
   } else {
     t11 = NA
   }
@@ -2909,9 +3024,9 @@ clinicalScores <- function(metric,
   vc <- VarCorr(mod2)
   
   t12 <- xtable(data.frame(vc),
-               display=c("s","s","s","s","g","fg"),
-               digits=c(0,0,0,0,2,2),
-               caption=paste("Variance of random effects without gene/value interaction", csName))
+                display=c("s","s","s","s","g","fg"),
+                digits=c(0,0,0,0,2,2),
+                caption=paste("Variance of random effects without gene/value interaction", csName))
   
   print(t12,
         file=logFile,
@@ -2919,9 +3034,9 @@ clinicalScores <- function(metric,
         include.rownames=FALSE)
   
   t13 <- xtable(summary(mod2)[[10]],
-               digits=c(0,2,2,1,2,2),
-               display=c("s","fg","f","f","f","g"),
-               caption=paste("Satterthwaite estimates of pvalues of linear mixed effects model without gene/value interaction for", csName, metricName,lobeTag))
+                digits=c(0,2,2,1,2,2),
+                display=c("s","fg","f","f","f","g"),
+                caption=paste("Satterthwaite estimates of pvalues of linear mixed effects model without gene/value interaction for", csName, metricName,lobeTag))
   
   print(t13,
         file=logFile,
@@ -2931,9 +3046,9 @@ clinicalScores <- function(metric,
   modComparison <- anova(mod, mod2)
   
   t14 <- xtable(modComparison,
-               caption = paste("Model comparison including (mod) and excluding (mod2) gene interaction term",csName, metricName,lobeTag),
-               digits = c(0,0,2,2,2,2,2,2,2),
-               display = c("s","d","fg","fg","fg","fg","d","fg","fg"))
+                caption = paste("Model comparison including (mod) and excluding (mod2) gene interaction term",csName, metricName,lobeTag),
+                digits = c(0,0,2,2,2,2,2,2,2),
+                display = c("s","d","fg","fg","fg","fg","d","fg","fg"))
   
   print(t14,
         include.rownames=TRUE,
@@ -2944,16 +3059,21 @@ clinicalScores <- function(metric,
   p4 <- ggplot(data=dF.wb, aes_string(x="values", y="score", colour="GS"))
   p4 <- p4 + geom_smooth(method="lm")
   
+  # add points if desired
+  if(plotPoints){
+    p4 <- p4 + geom_point()
+  }
+  
   ## add significance stars
   # for gene carriers:
   p4 <- addSigStar(p4,dF.wb,t8[["Pr(>|t|)"]][[2]],"gene carriers")
   p4 <- addSigStar(p4,dF.wb,t7[["Pr(>|t|)"]][[2]],"FTD")
-
+  
   p4 <- p4 + theme_bw()
-  p4 <- p4 + labs(x=csName, y=metricName)
+  p4 <- p4 + labs(x=metricName, y=csName)
   p4 <- p4 + theme(text=element_text(size=tsz))
   p4 <- p4 + scale_fill_manual(name="Group",values=as.vector(colList))
-  p4 <- p4 + theme(legend.position="right")
+  p4 <- p4 + theme(legend.position="bottom", legend.title = element_blank())
   # p4 <- p4 + labs(title=paste(csName,lobeTag))
   
   if(exclNeg){
@@ -2996,13 +3116,13 @@ hubDiff <- function(metric,sp,
                     excludeNegs=FALSE, # TRUE to exclude gene negative subjects
                     hubT=NA, # hub threshold
                     lobe=NA
-                    ){
+){
   if(metric=="degree"){
     weighted = TRUE
   } else {
     weighted = FALSE
   }
-
+  
   # import graph data
   dF.hubs <- importGraphData(metric, weighted, edgePC, lobe=lobe, hubT=hubT)
   dF.nonhubs <- importGraphData(metric, weighted, edgePC, lobe=lobe, hubT=hubT, nonHubs = TRUE)
@@ -3025,26 +3145,26 @@ hubDiff <- function(metric,sp,
   
   if(!excludeNegs){
     dF.hubs.wb.summary = ddply(dF.hubs.wb, .(), summarise,
-                          "gene negative" = sapply(mean(values[GS=="gene negative"], na.rm = TRUE), fn, a=2,b=3),
-                          "gene carriers" = sapply(mean(values[GS=="gene carriers"], na.rm = TRUE), fn, a=2,b=3),
-                          "FTD"      = sapply(mean(values[GS=="FTD"], na.rm = TRUE),fn, a=2,b=3)
-    )
-    
-    dF.nonhubs.wb.summary = ddply(dF.nonhubs.wb, .(), summarise,
                                "gene negative" = sapply(mean(values[GS=="gene negative"], na.rm = TRUE), fn, a=2,b=3),
                                "gene carriers" = sapply(mean(values[GS=="gene carriers"], na.rm = TRUE), fn, a=2,b=3),
                                "FTD"      = sapply(mean(values[GS=="FTD"], na.rm = TRUE),fn, a=2,b=3)
     )
     
+    dF.nonhubs.wb.summary = ddply(dF.nonhubs.wb, .(), summarise,
+                                  "gene negative" = sapply(mean(values[GS=="gene negative"], na.rm = TRUE), fn, a=2,b=3),
+                                  "gene carriers" = sapply(mean(values[GS=="gene carriers"], na.rm = TRUE), fn, a=2,b=3),
+                                  "FTD"      = sapply(mean(values[GS=="FTD"], na.rm = TRUE),fn, a=2,b=3)
+    )
+    
   } else {
     dF.hubs.wb.summary = ddply(dF.hubs.wb, .(), summarise,
-                          "gene carriers" = sapply(mean(values[GS=="gene carriers"], na.rm = TRUE), fn, a=2,b=3),
-                          "FTD"      = sapply(mean(values[GS=="FTD"], na.rm = TRUE),fn, a=2,b=3)
+                               "gene carriers" = sapply(mean(values[GS=="gene carriers"], na.rm = TRUE), fn, a=2,b=3),
+                               "FTD"      = sapply(mean(values[GS=="FTD"], na.rm = TRUE),fn, a=2,b=3)
     )
     
     dF.nonhubs.wb.summary = ddply(dF.nonhubs.wb, .(), summarise,
-                               "gene carriers" = sapply(mean(values[GS=="gene carriers"], na.rm = TRUE), fn, a=2,b=3),
-                               "FTD"      = sapply(mean(values[GS=="FTD"], na.rm = TRUE),fn, a=2,b=3)
+                                  "gene carriers" = sapply(mean(values[GS=="gene carriers"], na.rm = TRUE), fn, a=2,b=3),
+                                  "FTD"      = sapply(mean(values[GS=="FTD"], na.rm = TRUE),fn, a=2,b=3)
     )
   }
   
@@ -3053,7 +3173,7 @@ hubDiff <- function(metric,sp,
   #         include.rownames=FALSE,
   #         file=logFile,
   #         append=TRUE)
-
+  
   if(excludeNegs){
     return(list(geneCarriers = list(hub=dF.hubs.wb.summary[[2]], nonhub=dF.nonhubs.wb.summary[[2]], diff=dF.hubs.wb.summary[[2]] - dF.nonhubs.wb.summary[[2]]),
                 FTD = list(hub=dF.hubs.wb.summary[[3]], nonhub=dF.nonhubs.wb.summary[[3]], diff=dF.hubs.wb.summary[[3]] - dF.nonhubs.wb.summary[[3]])))
@@ -3209,17 +3329,17 @@ graphTimeComparisonCarriersOnly <- function(metric,
 }
 
 graphTimeComparisonPresymptomatic <- function(metric,
-                                            metricName,
-                                            sp, # spike percentage
-                                            cols,
-                                            weighted=TRUE, # is this a weighted metric?
-                                            outDir="wholeBrainVsAOOResults",
-                                            edgePC=3,
-                                            h=30,w=45,s=4,tsz=12,ps=4,
-                                            exclNeg=TRUE,
-                                            family=FALSE,
-                                            lobe=NA,
-                                            hubT=NA){
+                                              metricName,
+                                              sp, # spike percentage
+                                              cols,
+                                              weighted=TRUE, # is this a weighted metric?
+                                              outDir="wholeBrainVsAOOResults",
+                                              edgePC=3,
+                                              h=30,w=45,s=4,tsz=12,ps=4,
+                                              exclNeg=TRUE,
+                                              family=FALSE,
+                                              lobe=NA,
+                                              hubT=NA){
   # create output directory
   dir.create(outDir, showWarnings = FALSE)
   
